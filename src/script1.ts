@@ -25,7 +25,7 @@ const check1: { [key in string]: any } = Object.fromEntries(
     ])
 );
 
-// filter into cards
+// filter into valid cards
 const cards = oracles
     .filter(
         (c) =>
@@ -39,6 +39,7 @@ const cards = oracles
     )
     .filter((c) => c.type_line !== "Card")
     .filter((c) => c.set_name !== "Unknown Event");
+
 // convert to faces
 const faces: SimpleFace[] = [];
 cards.forEach((c) => {
@@ -81,6 +82,3 @@ const face_sorted_head = face_sorted.slice(0, 50);
 const face_sorted_tail = face_sorted.slice(-50).toReversed();
 
 console.log("ok");
-
-// TODO: mtgwikiからカードのページを探して日本語名を取る
-// TODO: カード名辞書

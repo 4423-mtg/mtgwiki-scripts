@@ -9,7 +9,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "dependencies": {},
+  "dependencies": {
+    "cheerio": "^1.1.2"
+  },
   "devDependencies": {
     "@scryfall/api-types": "^1.0.0-alpha.4",
     "@types/node": "^24.3.0",
