@@ -51,15 +51,6 @@ if (
         console.log(`>> ${n}`);
         hit_page_names.push(n);
     }
-
-    // for (let i = 2; i < searchresults.children().length; i++) {
-    //     const e = searchresults.children().eq(i);
-    //     if (e.hasClass("mw-search-results")) {
-    //         hit_page_names.push($("li > div > a", e).attr("title"));
-    //     } else {
-    //         break;
-    //     }
-    // }
 }
 
 // console.log(hit_page_names);
