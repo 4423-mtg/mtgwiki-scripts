@@ -47,6 +47,6 @@ export async function get_jpname(name: string) {
     if (jpnames.length == 1) {
         return jpnames[0];
     } else {
-        throw new Error(`failed to get jpname. ${pages}`);
+        return undefined;
     }
 }
