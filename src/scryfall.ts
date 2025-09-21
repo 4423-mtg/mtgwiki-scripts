@@ -5,14 +5,19 @@ import {
 } from "@scryfall/api-types";
 
 export function is_valid_cards(card: ScryfallCard.Any): boolean {
-    return !(
+    if (
         card.layout == "art_series" ||
         card.layout == "double_faced_token" ||
         card.layout == "emblem" ||
         card.layout == "reversible_card" ||
-        card.layout == "token"
-    );
-    // TODO: "Card", "Unknown Event"
+        card.layout == "token" ||
+        card.set_name == "Unknown Event"
+    ) {
+        return false;
+    } else {
+        return true;
+    }
+    // TODO: "Card", Arena Card
 }
 
 export type ValidCard = Exclude<

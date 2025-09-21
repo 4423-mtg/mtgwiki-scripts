@@ -1,37 +1,37 @@
 import * as cheerio from "cheerio";
 import type { DictEntry } from "./types/dict.js";
+import { match } from "node:assert";
 
 export async function search_pages(name: string): Promise<string[]> {
     const URL = `http://mtgwiki.com/index.php?search=${encodeURIComponent(
         name
     )}`;
 
-    try {
-        const response = await fetch(URL);
-        const text = await response.text();
+    const response = await fetch(URL);
+    if (response.status == 403) {
+        throw Error("403 Forbidden");
+    }
+    const text = await response.text();
 
-        let hit_page_names: string[] = [];
-        const $ = cheerio.load(text);
-        const searchresults = $("div.searchresults").first();
-        if (
-            searchresults.children().eq(0).hasClass("mw-search-createlink") &&
-            searchresults.children().eq(1).children().eq(1).text() ==
-                "ページ名と一致" &&
-            searchresults.children().eq(2).hasClass("mw-search-results")
-        ) {
-            const hits = searchresults.children().eq(2).children();
-            for (let i = 0; i < hits.length; i++) {
-                const n = $("div > a", hits.eq(i)).attr("title");
-                if (typeof n !== "undefined") {
-                    hit_page_names.push(n);
-                }
+    let hit_page_names: string[] = [];
+    const $ = cheerio.load(text);
+    const searchresults = $("div.searchresults").first();
+    if (
+        searchresults.children().eq(0).hasClass("mw-search-createlink") &&
+        searchresults.children().eq(1).children().eq(1).text() ==
+            "ページ名と一致" &&
+        searchresults.children().eq(2).hasClass("mw-search-results")
+    ) {
+        const hits = searchresults.children().eq(2).children();
+        for (let i = 0; i < hits.length; i++) {
+            const n = $("div > a", hits.eq(i)).attr("title");
+            if (typeof n !== "undefined") {
+                hit_page_names.push(n);
             }
-            return hit_page_names;
-        } else {
-            return [];
         }
-    } catch {
-        throw Error();
+        return hit_page_names;
+    } else {
+        return [];
     }
 }
 
@@ -97,13 +97,27 @@ export async function get_jpname2(
     if (matched.length == 1) {
         return { name: name, jpname: matched[0]?.groups?.jpname };
     } else {
-        const msg = matched.length >= 2 ? "two or more pages." : "no pages.";
-        console.error(`> "${name}":  ${msg} (${page_titles})`);
-        return {
-            name: name,
-            jpname: undefined,
-            info: `${msg} (${page_titles})`,
-        };
+        if (matched.length == 0) {
+            const msg = "no pages.";
+            console.warn(`> (mtgwiki.get_jpname2) "${name}":  ${msg}})`);
+            return {
+                name: name,
+                jpname: undefined,
+                info: `${msg} (${page_titles})`,
+            };
+        } else {
+            const msg = "two or more pages.";
+            console.warn(
+                `> (mtgwiki.get_jpname2) "${name}":  ${msg} (${JSON.stringify(
+                    page_titles
+                )})`
+            );
+            return {
+                name: name,
+                jpname: undefined,
+                info: `${msg} (${page_titles})`,
+            };
+        }
     }
 }
 
