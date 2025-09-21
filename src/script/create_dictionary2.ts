@@ -1,9 +1,9 @@
 import * as fs from "node:fs";
-import { setTimeout as sleep } from "timers/promises";
+import { setTimeout } from "timers/promises";
 import { type ScryfallCard, type ScryfallCardFace } from "@scryfall/api-types";
 import * as mtgwiki from "../mtgwiki.js";
 import * as scryfall from "../scryfall.js";
-import { type DictEntry } from "../types/dict.js";
+import { HTTPError, type DictEntry } from "../types/dict.js";
 import { time } from "node:console";
 
 const file_oraclecards = "./data/oracle-cards-20250823211001.json";
@@ -49,8 +49,10 @@ function get_primal_name(
 
 async function get_dict_entries(
     card: ScryfallCard.Any | ScryfallCardFace.Any,
-    option?: { playtest?: boolean; planar?: boolean }
+    option?: { playtest?: boolean; plane?: boolean }
 ): Promise<DictEntry[]> {
+    const interval = 5000;
+
     if ("card_faces" in card) {
         if (card.layout == "split") {
             // split
@@ -60,7 +62,7 @@ async function get_dict_entries(
                     .map((f) => get_primal_name(f))
                     .filter((n) => n !== undefined)
             );
-            sleep(3000);
+            await setTimeout(interval);
             const entry_all = await mtgwiki.get_jpname2(name, {
                 playtest: scryfall.is_playtest_card(card),
                 plane: scryfall.is_plane_card(card),
@@ -68,7 +70,7 @@ async function get_dict_entries(
             // 各半分のentries
             const entries_of_each_half: DictEntry[][] = [];
             for (const face of card.card_faces) {
-                sleep(3000);
+                await setTimeout(interval);
                 entries_of_each_half.push(await get_dict_entries(face, option));
             }
             return [entry_all].concat(...entries_of_each_half);
@@ -76,13 +78,14 @@ async function get_dict_entries(
             // other multiface card
             const entries_of_each_face: DictEntry[][] = [];
             for (const face of card.card_faces) {
-                sleep(3000);
+                await setTimeout(interval);
                 entries_of_each_face.push(await get_dict_entries(face, option));
             }
             return entries_of_each_face.flat();
         }
     } else {
         // singleface & Face
+        await setTimeout(interval);
         return [await mtgwiki.get_jpname2(card.name, option)];
     }
 }
@@ -97,54 +100,91 @@ async function main() {
     let count = 0;
     for (const card of cards.filter((c) => scryfall.is_valid_cards(c))) {
         // console.log(`> "${card.name}"`);
-        const names = scryfall.get_cardnames(card);
+        const names = scryfall.get_cardnames(card); // FIXME:
 
         // キャッシュ
         const caches = names.map((n): DictEntry | undefined =>
-            jpnames_cache[n] !== undefined && jpnames_cache[n] !== "undefined" // FIXME: 英語名の無いカードはinfoに書いておく
-                ? { name: n, jpname: jpnames_cache[n] }
+            jpnames_cache[n] !== undefined && jpnames_cache[n] !== "undefined"
+                ? { name: n, jpname: jpnames_cache[n], info: undefined }
                 : undefined
         );
-        if (caches.every((c) => c !== undefined)) {
+        if (
+            caches.every((c) => c !== undefined) &&
+            caches.every(
+                (c) => c.jpname !== "undefined" || c.info === "nojpname"
+            )
+        ) {
             // キャッシュがあれば使う
             caches.forEach((c) => jpnames.push(c));
             ++count;
+            // すべて保存
+            fs.writeFileSync("./data/jpname.json", stringify_entries(jpnames));
         } else {
             // キャッシュがなければ取得する
-            if (count !== 0) {
-                console.log(`>> ${count} cards are cached`);
+            if (false && count !== 0) {
+                console.log(`${count} cards are cached`);
                 count = 0;
             }
             let entries: DictEntry[] = [];
             try {
                 entries = await get_dict_entries(card, {
                     playtest: scryfall.is_playtest_card(card),
-                    planar: scryfall.is_plane_card(card),
+                    plane: scryfall.is_plane_card(card),
                 });
+                // 追加
+                jpnames.push(
+                    ...entries.map((e) => ({
+                        name: e.name,
+                        jpname: e.jpname ?? "undefined",
+                        info: e.info,
+                    }))
+                );
+                // ログ
+                entries.forEach((e, i) =>
+                    console.log(
+                        `>> "${card.name}": [${i}]: ${JSON.stringify(e)}`
+                    )
+                );
+                // すべて保存
+                fs.writeFileSync(
+                    "./data/jpname.json",
+                    stringify_entries(jpnames)
+                );
             } catch (e) {
                 console.error(`>> "${card.name}": ${e}`);
                 entries = [
                     {
                         name: get_primal_name(card) ?? "undefined",
                         jpname: "undefined",
-                        info: "Error (403 Forbidden)",
+                        info: "error",
                     },
                 ];
+                // 追加
+                jpnames.push(
+                    ...entries.map((e) => ({
+                        name: e.name,
+                        jpname: e.jpname ?? "undefined",
+                        info: e.info,
+                    }))
+                );
+                // ログ
+                entries.forEach((e, i) =>
+                    console.log(
+                        `>> "${card.name}": [${i}]: ${JSON.stringify(e)}`
+                    )
+                );
+                // すべて保存
+                fs.writeFileSync(
+                    "./data/jpname.json",
+                    stringify_entries(jpnames)
+                );
+                if (e instanceof HTTPError) {
+                    const minute = 5;
+                    console.info(`(Suspended ${minute} minutes...)`);
+                    await setTimeout(1000 * 60 * minute); // 403は5分待ち
+                }
             }
-            jpnames.push(
-                ...entries.map((e) => ({
-                    name: e.name,
-                    jpname: e.jpname ?? "undefined",
-                    ...("info" in e ? { info: e.info } : {}),
-                }))
-            );
-            entries.forEach((e, i) =>
-                console.log(`>> "${card.name}": [$${i}]: ${JSON.stringify(e)}`)
-            );
         }
-        // すべて保存
-        fs.writeFileSync("./data/jpname.json", stringify_entries(jpnames));
-        sleep(3000);
     }
 }
 

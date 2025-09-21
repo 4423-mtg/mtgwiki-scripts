@@ -11,7 +11,10 @@ export function is_valid_cards(card: ScryfallCard.Any): boolean {
         card.layout == "emblem" ||
         card.layout == "reversible_card" ||
         card.layout == "token" ||
-        card.set_name == "Unknown Event"
+        card.set_name == "Unknown Event" ||
+        card.set_name == "Jumpstart Front Cards" ||
+        card.set_name == "Jumpstart 2022 Front Cards" ||
+        card.set_name == "Dominaria United Jumpstart Front Cards"
     ) {
         return false;
     } else {
@@ -44,7 +47,7 @@ export function is_playtest_card(card: ScryfallCard.Any): boolean {
 }
 export function is_plane_card(card: ScryfallCard.Any): boolean {
     // "Plane — Dominaria"
-    const expr = new RegExp("^[^—]*\bPlane\b");
+    const expr = /^[^—]*\bPlane\b/;
     return "type_line" in card && expr.test(card.type_line);
 }
 

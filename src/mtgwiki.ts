@@ -1,15 +1,15 @@
 import * as cheerio from "cheerio";
-import type { DictEntry } from "./types/dict.js";
-import { match } from "node:assert";
+import { HTTPError, type DictEntry } from "./types/dict.js";
 
 export async function search_pages(name: string): Promise<string[]> {
-    const URL = `http://mtgwiki.com/index.php?search=${encodeURIComponent(
+    const URL = `http://mtgwiki.com/index.php?fulltext=Search&redirs=1&search=${encodeURIComponent(
         name
     )}`;
 
+    console.info(`⚙ [${new Date().toLocaleTimeString()}] search "${name}"`);
     const response = await fetch(URL);
-    if (response.status == 403) {
-        throw Error("403 Forbidden");
+    if (response.status !== 200) {
+        throw new HTTPError(undefined, response);
     }
     const text = await response.text();
 
@@ -35,7 +35,7 @@ export async function search_pages(name: string): Promise<string[]> {
     }
 }
 
-function escapeRegExp(str: string) {
+function escapeRegExp(str: string): string {
     // 以下の文字クラス内の文字を全てリテラル扱いにするために
     // \\ の後に元の文字（$&, etc）を置く
     return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -43,7 +43,7 @@ function escapeRegExp(str: string) {
 
 const split_delimiter = "+";
 
-export function get_splitcard_name(names: string[]) {
+export function get_splitcard_name(names: string[]): string {
     return names.join(split_delimiter);
 }
 
@@ -53,14 +53,22 @@ function regexp_title(
 ): RegExp {
     switch (type) {
         case "normal":
-            return new RegExp(`^((?<jpname>.+)/)?${escapeRegExp(name)}$`);
+            return new RegExp(
+                String.raw`^((?<jpname>.+)/)?` +
+                    escapeRegExp(name) +
+                    String.raw`$`
+            );
         case "playtest":
             return new RegExp(
-                `^((?<jpname>.+)/)?${escapeRegExp(name)} \(Playtest\)$`
+                String.raw`^((?<jpname>.+)/)?` +
+                    escapeRegExp(name) +
+                    String.raw` \([Pp]laytest\)$`
             );
         case "plane":
             return new RegExp(
-                `^((?<jpname>.+)/)?${escapeRegExp(name)} \(次元カード\)$`
+                String.raw`^((?<jpname>.+)/)?` +
+                    escapeRegExp(name) +
+                    String.raw` \(次元カード\)$`
             );
     }
     const x = type;
@@ -79,59 +87,42 @@ export async function get_jpname2(
 ): Promise<DictEntry> {
     // 検索
     const page_titles = await search_pages(name);
+    const expr = regexp_title(
+        name,
+        option?.playtest ? "playtest" : option?.plane ? "plane" : "normal"
+    );
     // 該当のページを探す
+    // FIXME: The Lord Master of Hell
+    // FIXME: Misinformation
     const matched = page_titles
-        .map((title) =>
-            title.match(
-                regexp_title(
-                    name,
-                    option?.playtest
-                        ? "playtest"
-                        : option?.plane
-                        ? "plane"
-                        : "normal"
-                )
-            )
-        )
+        .map((title) => title.match(expr))
         .filter((m) => m !== null);
     if (matched.length == 1) {
-        return { name: name, jpname: matched[0]?.groups?.jpname };
+        const jpname = matched[0]?.groups?.jpname;
+        return {
+            name: name,
+            jpname: jpname,
+            info: jpname === undefined ? "nojpname" : undefined,
+        };
     } else {
         if (matched.length == 0) {
-            const msg = "no pages.";
-            console.warn(`> (mtgwiki.get_jpname2) "${name}":  ${msg}})`);
+            console.warn(`> (mtgwiki.get_jpname2) "${name}": "no pages."})`);
             return {
                 name: name,
                 jpname: undefined,
-                info: `${msg} (${page_titles})`,
+                info: "nopage",
             };
         } else {
-            const msg = "two or more pages.";
             console.warn(
-                `> (mtgwiki.get_jpname2) "${name}":  ${msg} (${JSON.stringify(
-                    page_titles
+                `> (mtgwiki.get_jpname2) "${name}": "two or more pages." (${JSON.stringify(
+                    matched.map((m) => m[0])
                 )})`
             );
             return {
                 name: name,
                 jpname: undefined,
-                info: `${msg} (${page_titles})`,
+                info: "manypages",
             };
         }
     }
-}
-
-/**
- * ```
- * // Example
- * ["Fire", "Ice"] => { name: "Fire+Ice", jpname: "火+氷"}
- * ```
- */
-export async function get_entry_split(
-    names: string[],
-    option?: { playtest?: boolean; plane?: boolean }
-): Promise<DictEntry> {
-    // 各半分のprimalname => 全体のprimalname
-    //  => 全体の日本語名 => 各半分の日本語名
-    return get_jpname2(get_splitcard_name(names), option);
 }
