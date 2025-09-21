@@ -5,6 +5,7 @@ import * as mtgwiki from "../mtgwiki.js";
 import * as scryfall from "../scryfall.js";
 import { HTTPError, type DictEntry } from "../types/dict.js";
 import { time } from "node:console";
+import assert, { ok } from "node:assert";
 
 const file_oraclecards = "./data/oracle-cards-20250823211001.json";
 
@@ -28,22 +29,26 @@ function stringify_entries(entries: DictEntry[]): string {
     return ret;
 }
 
-/** 分割カードの日本語名を取るのにまず英語名が必要。 */
+/** 分割カードの日本語名を取るのにまず各半分の英語名が必要。 */
 function get_primal_name(
     card: ScryfallCard.Any | ScryfallCardFace.Any
 ): string | undefined {
+    return get_cardnames(card)[0];
+}
+
+/** そのカードの中にある、日本語名を取りたいカード名。 */
+export function get_cardnames(
+    card: ScryfallCard.Any | ScryfallCardFace.Any
+): string[] {
     if ("card_faces" in card) {
+        const faces: string[] = card.card_faces.map((f) => f.name);
         if (card.layout === "split") {
-            return mtgwiki.get_splitcard_name(
-                card.card_faces
-                    .map((f) => get_primal_name(f))
-                    .filter((n) => n !== undefined)
-            );
+            return [mtgwiki.get_splitcard_name(faces)].concat(faces);
         } else {
-            return card.card_faces[0]?.name;
+            return faces;
         }
     } else {
-        return card.name;
+        return [card.name];
     }
 }
 
@@ -68,11 +73,41 @@ async function get_dict_entries(
                 plane: scryfall.is_plane_card(card),
             });
             // 各半分のentries
-            const entries_of_each_half: DictEntry[][] = [];
-            for (const face of card.card_faces) {
-                await setTimeout(interval);
-                entries_of_each_half.push(await get_dict_entries(face, option));
+            let entries_of_each_half: DictEntry[][] = [];
+            if (entry_all.jpname === undefined) {
+                for (const f of card.card_faces) {
+                    entries_of_each_half.push(await get_dict_entries(f));
+                }
+            } else {
+                const a = mtgwiki.get_splitcard_name_inverse(entry_all.jpname);
+                if (a.length == card.card_faces.length) {
+                    for (let i = 0; i < card.card_faces.length; i++) {
+                        const f = card.card_faces[i];
+                        assert(f !== undefined);
+                        const f_primalname = get_primal_name(f);
+                        let entries: DictEntry[] = [];
+
+                        if (f_primalname !== undefined) {
+                            entries.push({
+                                name: f_primalname,
+                                jpname: a[i],
+                                info: entry_all.info,
+                            });
+                        }
+                        entries.push(
+                            ...(await get_dict_entries(f)).filter(
+                                (e) => e.name !== f_primalname
+                            )
+                        );
+                        entries_of_each_half[i] = entries;
+                    }
+                } else {
+                    throw Error(
+                        "分割カードの日本語名の数が英語名の数と一致していません。"
+                    );
+                }
             }
+
             return [entry_all].concat(...entries_of_each_half);
         } else {
             // other multiface card
@@ -100,7 +135,7 @@ async function main() {
     let count = 0;
     for (const card of cards.filter((c) => scryfall.is_valid_cards(c))) {
         // console.log(`> "${card.name}"`);
-        const names = scryfall.get_cardnames(card); // FIXME:
+        const names = get_cardnames(card);
 
         // キャッシュ
         const caches = names.map((n): DictEntry | undefined =>

@@ -47,6 +47,10 @@ export function get_splitcard_name(names: string[]): string {
     return names.join(split_delimiter);
 }
 
+export function get_splitcard_name_inverse(name: string): string[] {
+    return name.split(split_delimiter);
+}
+
 function regexp_title(
     name: string,
     type: "normal" | "playtest" | "plane" = "normal"

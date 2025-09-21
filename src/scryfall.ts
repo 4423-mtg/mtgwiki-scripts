@@ -36,12 +36,6 @@ export type ValidFace = Exclude<
     ScryfallCardFace.Reversible
 >;
 
-export function get_cardnames(card: ScryfallCard.Any): string[] {
-    return "card_faces" in card
-        ? card.card_faces.map((f) => f.name)
-        : [card.name];
-}
-
 export function is_playtest_card(card: ScryfallCard.Any): boolean {
     return card.promo_types?.includes("playtest" as ScryfallPromoType) ?? false;
 }
