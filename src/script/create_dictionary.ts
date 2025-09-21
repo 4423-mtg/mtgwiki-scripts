@@ -1,6 +1,7 @@
-import { readFileSync } from "node:fs";
+import * as fs from "node:fs";
 import * as mtgwiki from "../mtgwiki.js";
 import { setTimeout } from "node:timers/promises";
+import { type ScryfallCard } from "@scryfall/api-types";
 
 type Card = {
     name: string;
@@ -10,12 +11,13 @@ type Card = {
     set_name: string;
 };
 
+// カードデータ
 const path = String.raw`.\data\oracle-cards-20250823211001.json`;
 console.log("Reading...");
-const oracles: Card[] = JSON.parse(readFileSync(path, "utf-8"));
+const oracles: ScryfallCard.Any[] = JSON.parse(fs.readFileSync(path, "utf-8"));
 console.log("length=" + oracles.length);
 
-// filter into valid cards
+// 対象外のカードを除外
 const cards = oracles
     .filter(
         (c) =>
@@ -61,16 +63,54 @@ function convert_to_query(card: Card | { name: string }): string[] {
 }
 
 const queries: string[] = cards.flatMap((c) => convert_to_query(c));
+fs.writeFileSync("./data/query.json", JSON.stringify(queries, null, 2));
 
-const jpnames: Array<string> = [];
+// jpname.jsonを読み込む。なければ作る
+const path_jpname = "./data/jpname.json";
+let jpnames: {
+    [k: string]: string | undefined;
+};
+if (!fs.existsSync(path_jpname)) {
+    jpnames = Object.fromEntries(queries.map((q) => [q, ""]));
+    fs.writeFileSync(path_jpname, JSON.stringify(jpnames, null, 2));
+}
+jpnames = JSON.parse(fs.readFileSync(path_jpname, "utf-8"));
+
 // get jpname
-for (let i = 0; i < 10 && i < queries.length; i++) {
-    const jpn = await mtgwiki.get_jpname(queries[i] as string);
-    if (jpn !== undefined) {
-        jpnames.push(jpn);
+for (let i = 0; i < queries.length; i++) {
+    const q = queries[i];
+    if (
+        q !== undefined &&
+        (!(q in jpnames) || jpnames[q] === "" || jpnames[q] === "undefined")
+    ) {
+        let jpn;
+        try {
+            jpn = await mtgwiki.get_jpname(q);
+        } catch (error) {
+            console.log(
+                "> [" +
+                    new Date().toLocaleString() +
+                    "] " +
+                    queries[i] +
+                    ": fetch error"
+            );
+            continue;
+        }
+        jpnames[q] = jpn !== undefined ? jpn : "undefined";
+        console.log(
+            "> [" +
+                new Date().toLocaleString() +
+                "] " +
+                queries[i] +
+                " => " +
+                jpn
+        );
+        fs.writeFileSync(
+            "./data/jpname.json",
+            JSON.stringify(jpnames, null, 2)
+        );
+        await setTimeout(3000);
     }
-    console.log("> " + queries[i] + " => " + jpn);
-    await setTimeout(1000);
 }
 
 console.log("end");
