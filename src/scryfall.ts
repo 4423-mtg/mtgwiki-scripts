@@ -1,10 +1,20 @@
+import * as fs from "node:fs";
+
 import {
     type ScryfallCard,
     type ScryfallCardFace,
     type ScryfallPromoType,
 } from "@scryfall/api-types";
 
-export function is_valid_cards(card: ScryfallCard.Any): boolean {
+/** バルクファイルロード */
+export function loadBulkFile(path: string): ScryfallCard.Any[] {
+    const text = fs.readFileSync(path, "utf-8");
+    const cards: ScryfallCard.Any[] = JSON.parse(text);
+    return cards;
+}
+
+/** 調査対象判定。紋章、トークン、アートカード等を除外 */
+export function isValidCard(card: ScryfallCard.Any): card is ValidCard {
     if (
         card.layout == "art_series" ||
         card.layout == "double_faced_token" ||
