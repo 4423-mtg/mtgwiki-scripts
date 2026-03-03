@@ -3,7 +3,7 @@ import { HTTPError, type DictEntry } from "./types/dict.js";
 
 export async function search_pages(name: string): Promise<string[]> {
     const URL = `http://mtgwiki.com/index.php?fulltext=Search&redirs=1&search=${encodeURIComponent(
-        name
+        name,
     )}`;
 
     console.info(`⚙ [${new Date().toLocaleTimeString()}] search "${name}"`);
@@ -53,26 +53,26 @@ export function get_splitcard_name_inverse(name: string): string[] {
 
 function regexp_title(
     name: string,
-    type: "normal" | "playtest" | "plane" = "normal"
+    type: "normal" | "playtest" | "plane" = "normal",
 ): RegExp {
     switch (type) {
         case "normal":
             return new RegExp(
                 String.raw`^((?<jpname>.+)/)?` +
                     escapeRegExp(name) +
-                    String.raw`$`
+                    String.raw`$`,
             );
         case "playtest":
             return new RegExp(
                 String.raw`^((?<jpname>.+)/)?` +
                     escapeRegExp(name) +
-                    String.raw` \([Pp]laytest\)$`
+                    String.raw` \([Pp]laytest\)$`,
             );
         case "plane":
             return new RegExp(
                 String.raw`^((?<jpname>.+)/)?` +
                     escapeRegExp(name) +
-                    String.raw` \(次元カード\)$`
+                    String.raw` \(次元カード\)$`,
             );
     }
     const x = type;
@@ -87,13 +87,13 @@ function regexp_title(
  */
 export async function get_jpname2(
     name: string,
-    option?: { playtest?: boolean; plane?: boolean }
+    option?: { playtest?: boolean; plane?: boolean },
 ): Promise<DictEntry> {
     // 検索
     const page_titles = await search_pages(name);
     const expr = regexp_title(
         name,
-        option?.playtest ? "playtest" : option?.plane ? "plane" : "normal"
+        option?.playtest ? "playtest" : option?.plane ? "plane" : "normal",
     );
     // 該当のページを探す
     // FIXME: The Lord Master of Hell
@@ -119,8 +119,8 @@ export async function get_jpname2(
         } else {
             console.warn(
                 `> (mtgwiki.get_jpname2) "${name}": "two or more pages." (${JSON.stringify(
-                    matched.map((m) => m[0])
-                )})`
+                    matched.map((m) => m[0]),
+                )})`,
             );
             return {
                 name: name,

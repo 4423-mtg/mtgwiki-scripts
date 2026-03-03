@@ -6,6 +6,17 @@ import {
     type ScryfallPromoType,
 } from "@scryfall/api-types";
 
+// TODO:
+// - バルクファイルDL
+// - バルクファイルからカード選定するための各種条件
+//   - 初出のみ
+//   - 何らかのフォーマットでプレイ可能カード
+//     - 見た目上はプレイできるが公式フォーマット使用不可のカード (Heros of RealmsやShichifukujin Dragonなど)
+//   - 銀枠
+//   - 分割や出来事を別カードとして切り出すかどうか
+//   - アリーナ専用カード
+//   - アリーナ再調整カード
+
 /** バルクファイルロード */
 export function loadBulkFile(path: string): ScryfallCard.Any[] {
     const text = fs.readFileSync(path, "utf-8");

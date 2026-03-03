@@ -1,4 +1,5 @@
-import { load } from "cheerio";
+// jpname.json から info が manypages になっているカードだけ別ファイルへ保存する
+
 import * as fs from "node:fs";
 
 const file_jpname = "./data/jpname.json";

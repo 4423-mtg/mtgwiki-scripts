@@ -1,3 +1,5 @@
+// FIXME: mtgwiki.tsにまとめる
+
 import { readFileSync } from "node:fs";
 import * as cheerio from "cheerio";
 
@@ -18,7 +20,7 @@ function test() {
                     "emblem",
                     "reversible_card",
                     "token",
-                ].includes(c.layout)
+                ].includes(c.layout),
         )
         .filter((c) => c.type_line !== "Card")
         .filter((c) => c.set_name !== "Unknown Event");

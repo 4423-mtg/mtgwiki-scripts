@@ -1,6 +1,8 @@
+// カードを、記号を除いた日本語名の文字数でソートする
+
 import * as fs from "node:fs";
 import { type ScryfallCard, type ScryfallCardFace } from "@scryfall/api-types";
-import * as scryfall from "../scryfall.js";
+import * as scryfall from "../old/scryfall.js";
 
 const file_oraclecards = "./data/oracle-cards-20250823211001.json";
 const file_jpname = "./data/jpname.json";
@@ -24,7 +26,7 @@ function load_jpname(): DictEntry[] {
 
 function main() {
     const oracle = load_oraclecards().filter((card) =>
-        scryfall.is_valid_cards(card)
+        scryfall.isValidCard(card),
     );
     const jpnames = load_jpname();
 
@@ -56,7 +58,9 @@ function main() {
                 }
             })
             .filter((tuple) =>
-                tuple.jpnames.every((e) => e !== undefined && e !== "undefined")
+                tuple.jpnames.every(
+                    (e) => e !== undefined && e !== "undefined",
+                ),
             ) as {
             card: ScryfallCard.Any;
             jpnames: string[];
@@ -65,7 +69,7 @@ function main() {
         const f = (strarray: string[]) =>
             strarray.reduce(
                 (n, s) => n + s.replace(/[・、 　:：]/g, "").length,
-                0
+                0,
             );
         return -(f(c1.jpnames) - f(c2.jpnames));
     });
@@ -80,7 +84,7 @@ function main() {
         return {
             length: tuple.jpnames.reduce(
                 (n, s) => n + s.replace(/[・、 　:：]/g, "").length,
-                0
+                0,
             ),
             jpname: _jp,
             enname: _en,

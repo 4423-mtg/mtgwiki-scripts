@@ -10,7 +10,8 @@
       "request": "launch",
       "skipFiles": ["<node_internals>/**"],
       "type": "node",
-      "cwd": "${workspaceFolder}"
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "tsc: ビルド - tsconfig.json"
     },
     {
       "type": "node",

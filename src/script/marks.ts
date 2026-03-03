@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import { type ScryfallCard } from "@scryfall/api-types";
-import { isValidCard, loadBulkFile, ValidCard } from "../scryfall.js";
+import { isValidCard, loadBulkFile, ValidCard } from "../old/scryfall.js";
 
 // 名前に記号を含むカード
 const file_oraclecards =
@@ -23,7 +23,7 @@ function main() {
                     name: face.name,
                     set_name: card.set_name,
                     card: card,
-                })
+                }),
             );
         } else {
             cardnames.push({
@@ -37,7 +37,7 @@ function main() {
     // 抽出
     const pattern = new RegExp(/[^a-zA-Z0-9,'. -]/);
     const cardnamesContainingMark = cardnames.filter((obj) =>
-        pattern.test(obj.name)
+        pattern.test(obj.name),
     );
     console.log(cardnamesContainingMark);
     ("");
