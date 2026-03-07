@@ -12,14 +12,15 @@
       "type": "node",
       "cwd": "${workspaceFolder}",
       "preLaunchTask": "tsc: ビルド - tsconfig.json"
-    },
-    {
-      "type": "node",
-      "request": "launch",
-      "name": "script1.ts",
-      "skipFiles": ["<node_internals>/**"],
-      "program": "${workspaceFolder}\\src\\script1.ts",
-      "outFiles": ["${workspaceFolder}/**/*.js"]
     }
+    // ,
+    // {
+    //   "type": "node",
+    //   "request": "launch",
+    //   "name": "script1.ts",
+    //   "skipFiles": ["<node_internals>/**"],
+    //   "program": "${workspaceFolder}\\src\\script1.ts",
+    //   "outFiles": ["${workspaceFolder}/**/*.js"]
+    // }
   ]
 }

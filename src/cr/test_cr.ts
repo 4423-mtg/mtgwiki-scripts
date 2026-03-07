@@ -1,9 +1,30 @@
 import * as cheerio from "cheerio";
 import { writeFileSync } from "node:fs";
 
-import { CRNumber, equals } from "./cr.js";
+import {
+    BodyItem,
+    bodyItemToText,
+    crNumberToSectionNumber,
+    DictItem,
+    HeaderItem,
+    isNumberedLine,
+    parseCRNumber,
+    parseTextBody,
+    bodyItemToTocText,
+    TocItem,
+    getLevel,
+} from "./cr.js";
 
 const outdir = "./cr";
+function saveFile(filename: string, text: string): void {
+    const path = outdir + `/${filename}`;
+    if (text.length > 0 && text.at(-1) !== "\n") {
+        writeFileSync(path, text + "\n");
+    } else {
+        writeFileSync(path, text);
+    }
+    console.log(`> ${path}`);
+}
 
 // (1) 日本公式の総合ルールページをfetch
 const content = await fetch("https://mtg-jp.com/gameplay/rules/docs/0006836/");
@@ -27,16 +48,10 @@ main.children().each((i, e) => {
         );
     }
 });
-writeFileSync(outdir + "/lines.txt", lines.join("\n") + "\n");
-console.log("> " + outdir + "/lines.txt");
+saveFile("lines.txt", lines.join("\n"));
 
-// (4) 前書き・目次・ルール本文・用語集に分ける
-const parsed: (
-    | { part: "header"; text: string }
-    | { part: "toc"; text: string; crNumber: string; noNumberText: string }
-    | { part: "body"; text: string; crNumber: CRNumber; noNumberText: string }
-    | { part: "dict"; text: string; itemName: string; body: string }
-)[] = [];
+// (4) 各行の内容を見て前書き・目次・ルール本文・用語集を判定しつつ段落ごとにまとめる
+const items: (HeaderItem | TocItem | BodyItem | DictItem)[] = [];
 let mode: "header" | "toc" | "body" | "dict" | "credit" | undefined = "header";
 
 lines.forEach((l) => {
@@ -63,8 +78,7 @@ function parseHeader(line: string) {
         mode = "toc";
         return;
     }
-
-    parsed.push({ part: "header", text: line });
+    items.push({ part: "header", text: line });
 }
 function parseToc(line: string) {
     if (line === "マジック：ザ・ギャザリング　総合ルール") {
@@ -74,8 +88,7 @@ function parseToc(line: string) {
     if (line === "もくじ") {
         return;
     }
-
-    parsed.push({
+    items.push({
         part: "toc",
         text: line,
         crNumber: line.match(/^([0-9]+)\.? *(.*)/)?.[1] ?? "",
@@ -90,31 +103,34 @@ function parseBody(line: string) {
     if (line === "マジック：ザ・ギャザリング　総合ルール") {
         return;
     }
-
     // 項番付きの行
     if (isNumberedLine(line)) {
-        parsed.push({
+        items.push({
             part: "body",
             text: line,
             crNumber: parseCRNumber(line),
             noNumberText: parseTextBody(line),
         });
     } else {
-        // 項番のない行
-        const prevItem = parsed[parsed.length - 1];
+        // 項番のない行は、直前のアイテムがbodyならそれに追加する
+        const prevItem = items[items.length - 1];
         if (prevItem !== undefined && prevItem.part === "body") {
             const body = line.replace(/^\s+/, "");
-            parsed[parsed.length - 1] = {
+            items[items.length - 1] = {
                 part: "body",
                 text:
-                    prevItem.text.length > 0
-                        ? prevItem.text + "\n" + body
-                        : body,
+                    prevItem.text.length === 0
+                        ? body
+                        : prevItem.text.match(/例[:：]\s*$/) !== null
+                          ? prevItem.text + body
+                          : prevItem.text + "\n" + body,
                 crNumber: prevItem.crNumber,
                 noNumberText:
-                    prevItem.noNumberText.length > 0
-                        ? prevItem.noNumberText + "\n" + body
-                        : body,
+                    prevItem.noNumberText.length === 0
+                        ? body
+                        : prevItem.noNumberText.match(/例[:：]\s*$/) !== null
+                          ? prevItem.noNumberText + body
+                          : prevItem.noNumberText + "\n" + body,
             };
         } else {
             throw new Error();
@@ -129,10 +145,9 @@ function parseDict(line: string) {
     if (line === "用語集") {
         return;
     }
-
     // 辞書項目名 末尾がスラッシュ＋英数字なら項目名と判定する
     if (line.match(/／[\x20-\x7E]+$/)) {
-        parsed.push({
+        items.push({
             part: "dict",
             text: line,
             itemName: line,
@@ -140,10 +155,10 @@ function parseDict(line: string) {
         });
     } else {
         // 説明文の場合は前の行に追加
-        const prevItem = parsed[parsed.length - 1];
+        const prevItem = items[items.length - 1];
         if (prevItem !== undefined && prevItem.part === "dict") {
             const body = line.replace(/^\s+/, "");
-            parsed[parsed.length - 1] = {
+            items[items.length - 1] = {
                 part: "dict",
                 text:
                     prevItem.text.length > 0
@@ -164,211 +179,110 @@ function parseDict(line: string) {
 // (5) テキスト化
 let text: string[] = [];
 let toc: string[] = [];
-parsed.forEach((p, i) => {
-    if (p.part === "header") {
-        text.push(p.text);
-    }
-    if (p.part === "toc") {
-        if (parsed[i - 1]?.part === "header") {
-            // header.txt
-            writeFileSync(
-                outdir + "/header.txt",
-                text.join("\n") + "\n\n__NOTOC__\n",
-            );
-            console.log("> " + outdir + "/header.txt");
-            text = [];
-        }
-        text.push(p.text);
-    }
-    if (p.part === "body") {
-        // toc.txt
-        if (parsed[i - 1]?.part === "toc") {
-            writeFileSync(
-                outdir + "/toc.txt",
-                text.join("\n") + "\n\n__NOTOC__\n",
-            );
-            console.log("> " + outdir + "/toc.txt");
-            text = [];
-        }
-        // body
-        const prevItem = parsed[i - 1];
-        if (prevItem?.part !== "body") {
-            // bodyの最初の行 (はじめに)
-            text.push(bodyToText(p));
-            pushBodyToToc(toc, p);
-        } else {
-            const prevSection = prevItem.crNumber.major?.at(0);
-            const currentSection = p.crNumber.major?.at(0);
-            if (
-                prevSection !== undefined &&
-                currentSection !== undefined &&
-                prevSection !== currentSection
-            ) {
-                // 新しいセクション (bodyはセクションごとにファイルを切り分ける)
-                // ${major[0]}.txt
-                writeFileSync(
-                    outdir + `/${prevSection}.txt`,
-                    [...toc, "", ...text, "", "__NOTOC__", ""].join("\n"),
+const notice = [
+    "このページの内容は、[https://mtg-jp.com/gameplay/rules マジック日本公式サイト]に掲載されているマジック総合ルール（和訳 20260116.0 版）を転記したものです。最新の総合ルールは公式サイトを参照してください。",
+    "----",
+].join("\n");
+
+items.forEach((item, i) => {
+    const prevItem = items[i - 1];
+    switch (item.part) {
+        case "header":
+            text.push(item.text);
+            break;
+        case "toc":
+            if (items[i - 1]?.part === "header") {
+                // header.txt
+                saveFile(
+                    "header.txt",
+                    [notice, "", ...text, "", "__NOTOC__"].join("\n"),
                 );
-                console.log("> " + outdir + `/${prevSection}.txt`);
                 text = [];
-                toc = [];
             }
-            text.push(bodyToText(p));
-            pushBodyToToc(toc, p);
-        }
-    }
-    if (p.part === "dict") {
-        // toc.txt
-        const prevItem = parsed[i - 1];
-        if (prevItem !== undefined && prevItem.part === "body") {
-            const prevSection = prevItem.crNumber.major?.at(0);
-            if (prevSection === undefined) {
-                throw new Error();
+            text.push(item.text);
+            break;
+        case "body":
+            // toc.txt
+            if (items[i - 1]?.part === "toc") {
+                saveFile(
+                    "toc.txt",
+                    [notice, "", ...text, "", "__NOTOC__"].join("\n"),
+                );
+                text = [];
             }
-            writeFileSync(
-                outdir + `/${prevSection}.txt`,
-                [...toc, "", ...text, "", "__NOTOC__", ""].join("\n"),
-            );
-            console.log("> " + outdir + `/${prevSection}.txt`);
-            text = [];
-        }
-        text.push("=" + p.itemName + "=");
-        text.push(p.body + "\n");
+            // body
+            if (prevItem?.part !== "body") {
+                // bodyの最初の行 (0. はじめに)
+                let itemText = bodyItemToText(item);
+                if (itemText !== undefined) {
+                    text.push(itemText);
+                }
+                let tocText = bodyItemToTocText(item);
+                if (tocText !== undefined) {
+                    toc.push(tocText);
+                }
+            } else {
+                const prevSection = crNumberToSectionNumber(prevItem.crNumber);
+                const currentSection = crNumberToSectionNumber(item.crNumber);
+                if (
+                    prevSection !== undefined &&
+                    currentSection !== undefined &&
+                    prevSection !== currentSection
+                ) {
+                    // 新しいセクション (bodyはセクションごとにファイルを切り分ける)
+                    // FIXME: セクションを辞書にして一括で出力する
+                    // ${major[0]}.txt
+                    saveFile(
+                        `${prevSection}.txt`,
+                        [
+                            notice,
+                            "",
+                            ...toc,
+                            "",
+                            "----",
+                            "",
+                            ...text,
+                            "",
+                            "__NOTOC__",
+                        ].join("\n"),
+                    );
+                    text = [];
+                    toc = [];
+                }
+                let itemText = bodyItemToText(item);
+                if (itemText !== undefined) {
+                    text.push(itemText);
+                }
+                let tocText = bodyItemToTocText(item);
+                if (tocText !== undefined) {
+                    toc.push(tocText);
+                }
+            }
+            break;
+        case "dict":
+            // toc.txt
+            if (prevItem !== undefined && prevItem.part === "body") {
+                const prevSection = prevItem.crNumber.major?.at(0);
+                if (prevSection === undefined) {
+                    throw new Error();
+                }
+                saveFile(
+                    `${prevSection}.txt`,
+                    [notice, "", ...toc, "", ...text, "", "__NOTOC__"].join(
+                        "\n",
+                    ),
+                );
+                text = [];
+            }
+            text.push("=" + item.itemName + "=");
+            text.push(item.body + "\n");
+            break;
+        default:
+            break;
     }
 });
-writeFileSync(outdir + "/dict.txt", text.join("\n"));
-console.log("> " + outdir + "/dict.txt");
+saveFile("dict.txt", [notice, "", ...text, "", "__NOTOC__"].join("\n"));
 
 console.log("hello");
 
 // ==================================================================
-/** 番号付きの項番かどうか */
-function isNumberedLine(text: string): boolean {
-    const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
-    return text.match(ptn) !== null;
-}
-/** 項番行の頭から項番をキャプチャする */
-function parseCRNumber(text: string): CRNumber {
-    const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
-    const m = text.match(ptn);
-    if (m === null) {
-        return {
-            major: undefined,
-            minor: undefined,
-            patch: undefined,
-        };
-    } else {
-        return {
-            major: m[1],
-            minor: m[4],
-            patch: m[6],
-        };
-    }
-}
-/** 項番を除いたテキスト */
-function parseTextBody(text: string): string {
-    const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
-    return text.replace(ptn, "").replace(/^ */, "");
-}
-
-/** 項番の階層レベル */
-function getLevel(crNumber: CRNumber): number {
-    if (
-        crNumber.major === undefined &&
-        crNumber.minor === undefined &&
-        crNumber.patch === undefined
-    ) {
-        return 0;
-    } else if (
-        crNumber.major !== undefined &&
-        crNumber.minor === undefined &&
-        crNumber.patch === undefined
-    ) {
-        return 1;
-    } else if (
-        crNumber.major !== undefined &&
-        crNumber.minor !== undefined &&
-        crNumber.patch === undefined
-    ) {
-        return 2;
-    } else if (
-        crNumber.major !== undefined &&
-        crNumber.minor !== undefined &&
-        crNumber.patch !== undefined
-    ) {
-        return 3;
-    } else {
-        return 0;
-    }
-}
-
-/** 各レベルの結合した項番文字列 */
-function crNumberToString(crNumber: CRNumber): string {
-    let str = "";
-    str += crNumber.major ? crNumber.major.toString() : "";
-    str += crNumber.minor ? "." + crNumber.minor.toString() : "";
-    str += crNumber.patch ? crNumber.patch.toString() : "";
-    return str;
-}
-
-function bodyToText(e: {
-    part: "body";
-    text: string;
-    crNumber: CRNumber;
-    noNumberText: string;
-}): string {
-    if (e.crNumber.major !== undefined && parseInt(e.crNumber.major) < 100) {
-        return `<!-- ${e.text} -->`;
-    } else {
-        let ret = "";
-        const headingMark = "=".repeat(getLevel(e.crNumber));
-        if (getLevel(e.crNumber) === 1) {
-            ret += "\n";
-        }
-        ret += headingMark;
-        ret += crNumberToString(e.crNumber);
-        ret += headingMark;
-        ret += "\n";
-        ret += e.noNumberText.replaceAll(/\n/g, "\n\n");
-
-        return ret;
-    }
-}
-function pushBodyToToc(
-    toc: string[],
-    p: {
-        part: "body";
-        text: string;
-        crNumber: CRNumber;
-        noNumberText: string;
-    },
-): void {
-    let tocLine: string;
-    const level = getLevel(p.crNumber);
-
-    if (level === 0) {
-        tocLine = "*" + `[[#${crNumberToString(p.crNumber)}|${p.text}]]`;
-    } else if (
-        level === 1 &&
-        p.crNumber.major !== undefined &&
-        p.crNumber.major.length > 1
-    ) {
-        tocLine =
-            "*".repeat(level) +
-            `[[#${crNumberToString(p.crNumber)}|${p.text}]]`;
-    } else if (
-        (p.crNumber.major === "701" || p.crNumber.major === "702") &&
-        level === 2
-    ) {
-        tocLine =
-            "*".repeat(level) +
-            (p.crNumber.minor !== "1"
-                ? `[[#${crNumberToString(p.crNumber)}|${p.text}]]`
-                : `[[#${crNumberToString(p.crNumber)}|${crNumberToString(p.crNumber)}]]`);
-    } else {
-        return;
-    }
-
-    toc.push(tocLine);
-}
