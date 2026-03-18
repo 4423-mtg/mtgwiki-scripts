@@ -1,6 +1,13 @@
 import * as cheerio from "cheerio";
-import { HTTPError, type DictEntry } from "./types/dict.js";
+import { HTTPError, type DictEntry } from "../types/dict.js";
 
+// TODO:
+// - 英語名から日本語名を取得する
+// - カード名(英語名/日本語名)からmtgwiki表記名を取得する
+// - 分割カード・次元カード・プレイテストカードで同様にする
+// - .
+
+/** wikiページ検索 */
 export async function search_pages(name: string): Promise<string[]> {
     const URL = `http://mtgwiki.com/index.php?fulltext=Search&redirs=1&search=${encodeURIComponent(
         name,
@@ -13,7 +20,6 @@ export async function search_pages(name: string): Promise<string[]> {
     }
     const text = await response.text();
 
-    let hit_page_names: string[] = [];
     const $ = cheerio.load(text);
     const searchresults = $("div.searchresults").first();
     if (
@@ -22,6 +28,7 @@ export async function search_pages(name: string): Promise<string[]> {
             "ページ名と一致" &&
         searchresults.children().eq(2).hasClass("mw-search-results")
     ) {
+        const hit_page_names: string[] = [];
         const hits = searchresults.children().eq(2).children();
         for (let i = 0; i < hits.length; i++) {
             const n = $("div > a", hits.eq(i)).attr("title");

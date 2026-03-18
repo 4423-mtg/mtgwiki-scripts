@@ -3,7 +3,7 @@
 import * as fs from "node:fs";
 import { setTimeout } from "timers/promises";
 import { type ScryfallCard, type ScryfallCardFace } from "@scryfall/api-types";
-import * as mtgwiki from "../mtgwiki.js";
+import * as mtgwiki from "../lib/mtgwiki.js";
 import * as scryfall from "../old/scryfall.js";
 import { HTTPError, type DictEntry } from "../types/dict.js";
 import { time } from "node:console";
