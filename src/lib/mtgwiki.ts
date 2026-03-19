@@ -1,21 +1,17 @@
 import * as cheerio from "cheerio";
 import { HTTPError, type DictEntry } from "../types/dict.js";
 
-// TODO:
-// - 英語名から日本語名を取得する
-// - カード名(英語名/日本語名)からmtgwiki表記名を取得する
-// - 分割カード・次元カード・プレイテストカードで同様にする
-// - .
-
 /** wikiページ検索 */
-export async function search_pages(name: string): Promise<string[]> {
+export async function searchWikiPages(name: string): Promise<string[]> {
     const URL = `http://mtgwiki.com/index.php?fulltext=Search&redirs=1&search=${encodeURIComponent(
         name,
     )}`;
+    console.log(`URL: ${URL}`);
 
     console.info(`⚙ [${new Date().toLocaleTimeString()}] search "${name}"`);
     const response = await fetch(URL);
     if (response.status !== 200) {
+        console.error(`HTTPError: ${response.status}, ${URL}`);
         throw new HTTPError(undefined, response);
     }
     const text = await response.text();
@@ -42,6 +38,195 @@ export async function search_pages(name: string): Promise<string[]> {
     }
 }
 
+/** mtgwikiで英語名から日本語名を取得する */
+export async function getJapaneseName(englishName: string): Promise<string> {
+    // FIXME: englishNameが複数の場合は？
+    const pageNames = await searchWikiPages(englishName);
+    // TODO: 検索結果から日本語名を判定する
+    const parsed = pageNames.map((name) => parsePageNameToCardName(name));
+    // - 分割カード・次元カード・プレイテストカードの場合...
+    return "";
+}
+
+/** mtgwikiで日本語名から英語名を取得する */
+export async function getEnglishName(japaneseName: string): Promise<string> {
+    const pages = await searchWikiPages(japaneseName);
+    // TODO: 検索結果から英語名を判定する
+    // - 分割カード・次元カード・プレイテストカードの場合...
+    return "";
+}
+
+type CardName = { japaneseName?: string | undefined; englishName: string };
+
+/** カード名のmtgwiki表記を返す */
+export function getPageNameOfCard(
+    cardName: CardName | CardName[],
+    options?: { planar?: boolean; playtest?: boolean },
+): string {
+    let ret: string;
+    if (Array.isArray(cardName)) {
+        // 分割カードの場合
+        // 日本語名1+日本語名2/英語名1+英語名2
+        const jp = cardName
+            .map((c) => c.japaneseName)
+            .filter((n) => n !== undefined)
+            .join("+");
+        const en = cardName.map((c) => c.englishName).join("+");
+        ret = jp.length > 0 ? jp + "/" + en : en;
+    } else {
+        // 通常カードの場合
+        // 日本語名/英語名
+        ret =
+            cardName.japaneseName !== undefined
+                ? cardName.japaneseName + "/" + cardName.englishName
+                : cardName.englishName;
+    }
+
+    // (次元カード)
+    if (options?.planar) {
+        ret += " (次元カード)";
+    }
+    // (playtest)
+    if (options?.playtest) {
+        ret += " (playtest)"; // FIXME: playtest / Playtest
+    }
+    return ret;
+}
+
+/** mtgwikiのページ名をパースしてカード名を得る。 */
+export function parsePageNameToCardName(pageName: string):
+    | {
+          isSplit: false;
+          cardName: Required<CardName>;
+          isPlanar: boolean;
+          isPlaytest: boolean;
+      }
+    | {
+          isSplit: true;
+          cardNames: Required<CardName>[];
+          isPlanar: boolean;
+          isPlaytest: boolean;
+      }
+    | undefined {
+    // 特殊カード名
+    const special: Record<
+        string,
+        ReturnType<typeof parsePageNameToCardName>
+    > = {
+        "ペニーが操縦するSP//dr/SP//dr, Piloted by Peni": {
+            isSplit: false,
+            cardName: {
+                japaneseName: "ペニーが操縦するSP//dr",
+                englishName: "SP//dr, Piloted by Peni",
+            },
+            isPlanar: false,
+            isPlaytest: false,
+        },
+        "召喚：チョコボ＆モーグリ/Summon: Choco/Mog": {
+            isSplit: false,
+            cardName: {
+                japaneseName: "召喚：チョコボ＆モーグリ",
+                englishName: "Summon: Choco/Mog",
+            },
+            isPlanar: false,
+            isPlaytest: false,
+        },
+        "メイス＋２/+2 Mace": {
+            isSplit: false,
+            cardName: {
+                japaneseName: "メイス＋２",
+                englishName: "+2 Mace",
+            },
+            isPlanar: false,
+            isPlaytest: false,
+        },
+    };
+    if (special[pageName] !== undefined) {
+        return special[pageName];
+    }
+
+    // 正規表現でパース
+    const regexp = new RegExp(
+        /^((?<jpname>.*)\/)?(?<enname>.*)( *\((?<annotation>.*)\))? *$/,
+    );
+    const match = pageName.match(regexp);
+    if (match === null) {
+        return undefined;
+    }
+    // 結果判定
+    const enname = match.groups?.["enname"];
+    const annotation = match.groups?.["annotation"];
+    const isPlanar = annotation === "次元カード";
+    const isPlaytest = annotation === "playtest";
+    if (enname === undefined) {
+        return undefined;
+    }
+    if (enname.includes("+")) {
+        // 分割カード
+        const ennames = enname.split("+");
+        const jpnames = match.groups?.["jpname"]?.split("+");
+        if (jpnames === undefined) {
+            // 日本語名なし
+            return {
+                isSplit: true,
+                cardNames: ennames.map((en) => ({
+                    englishName: en,
+                    japaneseName: undefined,
+                })),
+                isPlanar: isPlanar,
+                isPlaytest: isPlaytest,
+            };
+        } else {
+            // 日本語名あり
+            // FIXME: zip()にして別関数に切り出す
+            const length =
+                ennames.length > jpnames.length
+                    ? ennames.length
+                    : jpnames.length;
+            let cardNames: Required<CardName>[] = [];
+            for (let index = 0; index < length; index++) {
+                const _en = ennames[index];
+                const _jp = jpnames[index];
+                if (_en === undefined || _jp === undefined) {
+                    return undefined;
+                }
+                cardNames.push({ englishName: _en, japaneseName: _jp });
+            }
+            return {
+                isSplit: true,
+                cardNames: cardNames,
+                isPlanar: isPlanar,
+                isPlaytest: isPlaytest,
+            };
+        }
+    } else {
+        // 通常カード
+        return {
+            isSplit: false,
+            cardName: {
+                englishName: enname,
+                japaneseName: match.groups?.["jpname"],
+            },
+            isPlanar: isPlanar,
+            isPlaytest: isPlaytest,
+        };
+    }
+
+    // Evil Boros Charm (playtest)
+    // Bind+Liberate (playtest)
+    // Horizon Boughs (次元カード)
+    // アガディームの面晶体原/Hedron Fields of Agadeem (次元カード)
+
+    // 生+死/Life+Death
+    // 稲妻/Lightning Bolt
+
+    // The Tabernacle at Pendrell Vale
+    // Who+What+When+Where+Why
+}
+
+// ======================================================
+// region: old
+// ======================================================
 function escapeRegExp(str: string): string {
     // 以下の文字クラス内の文字を全てリテラル扱いにするために
     // \\ の後に元の文字（$&, etc）を置く
@@ -97,7 +282,7 @@ export async function get_jpname2(
     option?: { playtest?: boolean; plane?: boolean },
 ): Promise<DictEntry> {
     // 検索
-    const page_titles = await search_pages(name);
+    const page_titles = await searchWikiPages(name);
     const expr = regexp_title(
         name,
         option?.playtest ? "playtest" : option?.plane ? "plane" : "normal",
