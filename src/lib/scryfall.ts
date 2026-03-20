@@ -19,10 +19,11 @@ type BulkDataInfo = {
     content_encoding: string;
 };
 
-/** オラクルカードバルクデータのフェッチ */
+/** Scryfallからオラクルカードのバルクデータをフェッチする */
 export async function fetchOracleCardsBulkData(): Promise<
     ScryfallCard.Any[] | undefined
 > {
+    console.info("Fetching oracle cards...");
     // バルクファイル情報のフェッチ
     const url_bulkDataInfo = new URL("https://api.scryfall.com/bulk-data");
     const info: ScryfallList.List<BulkDataInfo> = await fetch(
@@ -42,11 +43,11 @@ export async function fetchOracleCardsBulkData(): Promise<
     const bulkData: ScryfallCard.Any[] = await fetch(downloadUrl).then(
         (response) => response.json(),
     );
+    console.info(`Fetched from ${downloadUrl}`);
     return bulkData;
 }
 
 // TODO:
-// - 日本語名の取得 -> script/ へ
 // - カードタイプのパース (GET /catalog/card-types)
 
 /** プレイテストカードの判定 */

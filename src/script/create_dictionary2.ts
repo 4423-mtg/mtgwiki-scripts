@@ -8,6 +8,7 @@ import * as scryfall from "../old/scryfall.js";
 import { HTTPError, type DictEntry } from "../types/dict.js";
 import { time } from "node:console";
 import assert, { ok } from "node:assert";
+import { isPlaneCard, isPlaytestCard } from "../lib/scryfall.js";
 
 const file_oraclecards = "./data/oracle-cards-20250823211001.json";
 
@@ -27,7 +28,8 @@ async function main() {
 
     let count = 0;
     // 有効なカードについて走査
-    for (const card of cards.filter((c) => scryfall.isValidCard(c))) {
+    // for (const card of cards.filter((c) => scryfall.isValidCard(c))) {
+    for (const card of cards) {
         // console.log(`> "${card.name}"`);
         // カード名(複数の場合あり)を取得
         const names = get_cardnames(card);
@@ -64,8 +66,8 @@ async function main() {
             try {
                 // mtgwikiから日本語名を取得する
                 entries = await get_dict_entries(card, {
-                    playtest: scryfall.is_playtest_card(card),
-                    plane: scryfall.is_plane_card(card),
+                    playtest: isPlaytestCard(card),
+                    plane: isPlaneCard(card),
                 });
                 // 追加
                 jpnames.push(
@@ -191,8 +193,8 @@ async function get_dict_entries(
             );
             await setTimeout(interval);
             const entry_all = await mtgwiki.get_jpname2(name, {
-                playtest: scryfall.is_playtest_card(card),
-                plane: scryfall.is_plane_card(card),
+                playtest: isPlaytestCard(card),
+                plane: isPlaneCard(card),
             });
             // 各半分のentries
             let entries_of_each_half: DictEntry[][] = [];

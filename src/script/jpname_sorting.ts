@@ -25,8 +25,10 @@ function load_jpname(): DictEntry[] {
 }
 
 function main() {
-    const oracle = load_oraclecards().filter((card) =>
-        scryfall.isValidCard(card),
+    const oracle = load_oraclecards().filter(
+        (card) =>
+            // scryfall.isValidCard(card),
+            true,
     );
     const jpnames = load_jpname();
 

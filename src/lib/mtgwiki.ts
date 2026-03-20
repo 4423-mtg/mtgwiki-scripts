@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { HTTPError, type DictEntry } from "../types/dict.js";
+import { CardName } from "./commonTypes.js";
 
 /** wikiページ検索 */
 export async function searchWikiPages(name: string): Promise<string[]> {
@@ -39,13 +40,29 @@ export async function searchWikiPages(name: string): Promise<string[]> {
 }
 
 /** mtgwikiで英語名から日本語名を取得する */
-export async function getJapaneseName(englishName: string): Promise<string> {
-    // FIXME: englishNameが複数の場合は？
-    const pageNames = await searchWikiPages(englishName);
-    // TODO: 検索結果から日本語名を判定する
-    const parsed = pageNames.map((name) => parsePageNameToCardName(name));
-    // - 分割カード・次元カード・プレイテストカードの場合...
-    return "";
+export async function getJapaneseName(
+    englishName: string,
+): Promise<CardName | { info: string }>;
+export async function getJapaneseName(
+    englishName: string[],
+): Promise<CardName[] | { info: string }>;
+export async function getJapaneseName(
+    englishName: string | string[],
+): Promise<CardName | CardName[] | { info: string }> {
+    if (!Array.isArray(englishName)) {
+        // 通常カード
+        const pageNames = await searchWikiPages(englishName);
+        const parsed = pageNames.map((name) => parsePageNameToCardName(name));
+
+        // TODO: 検索結果から日本語名を判定する
+        // - 次元カード・プレイテストカードの場合...
+        //   - 普通に検索してヒットしない場合は次元カード・プレイテストカードで検索する
+        // FIXME: 取得できなかった場合は理由を返す
+    } else {
+        // マルチフェイス
+    }
+
+    return { info: "notImplemented" };
 }
 
 /** mtgwikiで日本語名から英語名を取得する */
@@ -55,8 +72,6 @@ export async function getEnglishName(japaneseName: string): Promise<string> {
     // - 分割カード・次元カード・プレイテストカードの場合...
     return "";
 }
-
-type CardName = { japaneseName?: string | undefined; englishName: string };
 
 /** カード名のmtgwiki表記を返す */
 export function getPageNameOfCard(
@@ -162,7 +177,7 @@ export function parsePageNameToCardName(pageName: string):
         return undefined;
     }
     if (enname.includes("+")) {
-        // 分割カード
+        // 分割カードの場合
         const ennames = enname.split("+");
         const jpnames = match.groups?.["jpname"]?.split("+");
         if (jpnames === undefined) {
@@ -178,29 +193,22 @@ export function parsePageNameToCardName(pageName: string):
             };
         } else {
             // 日本語名あり
-            // FIXME: zip()にして別関数に切り出す
-            const length =
-                ennames.length > jpnames.length
-                    ? ennames.length
-                    : jpnames.length;
-            let cardNames: Required<CardName>[] = [];
-            for (let index = 0; index < length; index++) {
-                const _en = ennames[index];
-                const _jp = jpnames[index];
-                if (_en === undefined || _jp === undefined) {
-                    return undefined;
-                }
-                cardNames.push({ englishName: _en, japaneseName: _jp });
+            if (ennames.length !== jpnames.length) {
+                throw new Error();
             }
+
             return {
                 isSplit: true,
-                cardNames: cardNames,
+                cardNames: ennames.map((en, idx) => ({
+                    englishName: en,
+                    japaneseName: jpnames[idx],
+                })),
                 isPlanar: isPlanar,
                 isPlaytest: isPlaytest,
             };
         }
     } else {
-        // 通常カード
+        // 通常カードの場合
         return {
             isSplit: false,
             cardName: {
