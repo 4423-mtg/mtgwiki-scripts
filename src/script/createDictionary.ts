@@ -22,7 +22,8 @@ async function main() {
             c.layout !== "art_series" &&
             c.layout !== "reversible_card",
     );
-    // FIXME: 日付でソート
+
+    // 日付でソート
     console.log("Sorting...");
     const cards_sorted = cards_filtered.sort(
         (a, b) =>
@@ -40,11 +41,11 @@ async function main() {
         if (c === undefined) {
             continue;
         }
-        console.log(`> name: ${c.name}`);
+        console.log(`[name: "${c.name}"]`);
 
         // 日本語名を解決する
         const ret = await resolveJpName(c, cache);
-        console.log(ret);
+        console.log(JSON.stringify(ret));
 
         // 辞書に追加
         const _dictEntry = (cardName: CardName): DictEntry =>
@@ -59,15 +60,19 @@ async function main() {
             dict[ret.cardName.englishName] = _dictEntry(ret.cardName);
         }
 
-        // 10秒空ける
+        // 保存
+        writeFileSync(
+            "data/cardname-jp/dictionary.json",
+            JSON.stringify(dict, undefined, 2),
+        );
+
+        // フェッチした場合は5秒空ける
         if (ret.fetched) {
-            await setTimeout(10 * 1000);
+            await setTimeout(5 * 1000);
         }
     }
 
     // TODO: 人力で確認し、特別リストを作る
-
-    writeFileSync("data/cardname-jp/dictionary.json", JSON.stringify(dict));
 }
 
 /** カードデータ取得。

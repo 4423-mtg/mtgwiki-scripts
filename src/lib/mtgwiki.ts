@@ -3,19 +3,37 @@ import { HTTPError, type DictEntry } from "../types/dict.js";
 import { CardName } from "./commonTypes.js";
 
 /** wikiページ検索 */
-export async function searchWikiPages(name: string): Promise<string[]> {
+export async function searchWikiPages(
+    name: string,
+    option?: { retry?: boolean; maxRetry?: number; interval?: number },
+): Promise<string[]> {
     const URL = `http://mtgwiki.com/index.php?fulltext=Search&redirs=1&search=${encodeURIComponent(
         name,
     )}`;
-    console.log(`URL: ${URL}`);
+    // console.log(`URL: ${URL}`);
 
-    console.info(`⚙ [${new Date().toLocaleTimeString()}] search "${name}"`);
-    const response = await fetch(URL);
-    if (response.status !== 200) {
-        console.error(`HTTPError: ${response.status}, ${URL}`);
-        throw new HTTPError(undefined, response);
+    // フェッチ
+    let text;
+    let tryCount = 0;
+    const _max = option?.maxRetry ?? 10;
+    while (true) {
+        console.info(
+            `search for page "${name}"... (${new Date().toLocaleTimeString()})`,
+        );
+
+        const response = await fetch(URL);
+        tryCount++;
+        if (response.status !== 200) {
+            console.error(`HTTPError: ${response.status}, ${URL}`);
+            throw new HTTPError(undefined, response);
+        }
+        // TODO: 4xx, 5xxエラー
+        text = await response.text();
+
+        if (option?.retry !== true || tryCount > _max) {
+            break;
+        }
     }
-    const text = await response.text();
 
     const $ = cheerio.load(text);
     const searchresults = $("div.searchresults").first();
@@ -50,19 +68,52 @@ export async function getJapaneseName(
     englishName: string | string[],
 ): Promise<CardName | CardName[] | { info: string }> {
     if (!Array.isArray(englishName)) {
-        // 通常カード
-        const pageNames = await searchWikiPages(englishName);
-        const parsed = pageNames.map((name) => parsePageNameToCardName(name));
-
-        // TODO: 検索結果から日本語名を判定する
-        // - 次元カード・プレイテストカードの場合...
-        //   - 普通に検索してヒットしない場合は次元カード・プレイテストカードで検索する
-        // FIXME: 取得できなかった場合は理由を返す
+        // 通常カードの場合
+        // ページ検索
+        const results = await searchWikiPages(englishName);
+        // ページ名をパースし、分割カードのページとパース失敗したページを除外
+        const parsed = results
+            .map((name) => parsePageNameToCardName(name))
+            .filter((p) => p !== undefined && !p.isSplit);
+        // 判定
+        if (parsed.length === 1) {
+            const p = parsed[0];
+            if (p === undefined) {
+                throw new Error();
+            }
+            return p.cardName;
+        } else {
+            // TODO: - 普通に検索してヒットしない場合は次元カード・プレイテストカードで検索する
+            const _temp = "[" + results.map((s) => `'${s}'`).join(", ") + "]";
+            const msg = `Failed to get japanese name (searchResult=${_temp})`;
+            console.warn(msg);
+            return { info: msg };
+        }
     } else {
-        // マルチフェイス
+        // マルチフェイスの場合
+        const pageName = getPageNameOfCard(
+            englishName.map((en) => ({ englishName: en })),
+        );
+        const results = await searchWikiPages(pageName);
+        // ページ名のパース
+        const parsed = results
+            .map((name) => parsePageNameToCardName(name))
+            .filter((p) => p !== undefined && p.isSplit);
+        // 判定
+        if (parsed.length === 1) {
+            const p = parsed[0];
+            if (p === undefined) {
+                throw new Error();
+            }
+            return p.cardNames;
+        } else {
+            // TODO: - 普通に検索してヒットしない場合は次元カード・プレイテストカードで検索する
+            const _temp = "[" + results.map((s) => `'${s}'`).join(", ") + "]";
+            const msg = `Failed to get japanese name (searchResult=${_temp})`;
+            console.warn(msg);
+            return { info: msg };
+        }
     }
-
-    return { info: "notImplemented" };
 }
 
 /** mtgwikiで日本語名から英語名を取得する */
@@ -108,21 +159,22 @@ export function getPageNameOfCard(
     return ret;
 }
 
+type SplittedParseResult = {
+    isSplit: true;
+    cardNames: Required<CardName>[];
+    isPlanar: boolean;
+    isPlaytest: boolean;
+};
+type NotSplittedParseResult = {
+    isSplit: false;
+    cardName: Required<CardName>;
+    isPlanar: boolean;
+    isPlaytest: boolean;
+};
 /** mtgwikiのページ名をパースしてカード名を得る。 */
-export function parsePageNameToCardName(pageName: string):
-    | {
-          isSplit: false;
-          cardName: Required<CardName>;
-          isPlanar: boolean;
-          isPlaytest: boolean;
-      }
-    | {
-          isSplit: true;
-          cardNames: Required<CardName>[];
-          isPlanar: boolean;
-          isPlaytest: boolean;
-      }
-    | undefined {
+export function parsePageNameToCardName(
+    pageName: string,
+): SplittedParseResult | NotSplittedParseResult | undefined {
     // 特殊カード名
     const special: Record<
         string,
@@ -166,6 +218,7 @@ export function parsePageNameToCardName(pageName: string):
     );
     const match = pageName.match(regexp);
     if (match === null) {
+        console.warn(`Failed to parse page "${pageName}"`);
         return undefined;
     }
     // 結果判定
@@ -174,6 +227,7 @@ export function parsePageNameToCardName(pageName: string):
     const isPlanar = annotation === "次元カード";
     const isPlaytest = annotation === "playtest";
     if (enname === undefined) {
+        console.warn(`Page "${pageName}" has no english name for some reason`);
         return undefined;
     }
     if (enname.includes("+")) {
