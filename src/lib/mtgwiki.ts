@@ -5,15 +5,15 @@ import { CardName } from "./commonTypes.js";
 /** wikiページ検索 */
 export async function searchWikiPages(
     name: string,
-    option?: { retry?: boolean; maxRetry?: number; interval?: number },
-): Promise<string[]> {
+    option: { retry?: boolean; maxRetry?: number; interval?: number } = {},
+): Promise<{ pages: string[]; info: string | undefined }> {
     const URL = `http://mtgwiki.com/index.php?fulltext=Search&redirs=1&search=${encodeURIComponent(
         name,
     )}`;
     // console.log(`URL: ${URL}`);
 
     // フェッチ
-    let text;
+    let text: string | undefined = undefined;
     let tryCount = 0;
     const _max = option?.maxRetry ?? 10;
     while (true) {
@@ -21,18 +21,25 @@ export async function searchWikiPages(
             `search for page "${name}"... (${new Date().toLocaleTimeString()})`,
         );
 
-        const response = await fetch(URL);
         tryCount++;
-        if (response.status !== 200) {
-            console.error(`HTTPError: ${response.status}, ${URL}`);
-            throw new HTTPError(undefined, response);
-        }
-        // TODO: 4xx, 5xxエラー
-        text = await response.text();
-
-        if (option?.retry !== true || tryCount > _max) {
+        const response = await fetch(URL);
+        if (response.status == 200) {
+            text = await response.text();
             break;
+        } else {
+            console.error(`HTTPError: ${response.status}, ${URL}`);
+            // TODO: 4xx, 5xxエラー
+            if (option?.retry === true && tryCount < _max) {
+                continue;
+            } else {
+                break;
+            }
         }
+    }
+
+    if (text === undefined) {
+        console.error(`Failed to search mtgwiki (query=${name}, URL=${URL})`);
+        throw new Error();
     }
 
     const $ = cheerio.load(text);
@@ -51,73 +58,103 @@ export async function searchWikiPages(
                 hit_page_names.push(n);
             }
         }
-        return hit_page_names;
+        return { pages: hit_page_names, info: undefined };
     } else {
-        return [];
+        return { pages: [], info: undefined };
     }
 }
 
 /** mtgwikiで英語名から日本語名を取得する */
-export async function getJapaneseName(
+export async function getJapaneseNameFromMtgWiki(
     englishName: string,
-): Promise<CardName | { info: string }>;
-export async function getJapaneseName(
+): Promise<{ cardName: CardName; choices: string[]; info: string | undefined }>;
+export async function getJapaneseNameFromMtgWiki(
     englishName: string[],
-): Promise<CardName[] | { info: string }>;
-export async function getJapaneseName(
+): Promise<{
+    cardName: CardName[];
+    choices: string[];
+    info: string | undefined;
+}>;
+export async function getJapaneseNameFromMtgWiki(
     englishName: string | string[],
-): Promise<CardName | CardName[] | { info: string }> {
-    if (!Array.isArray(englishName)) {
-        // 通常カードの場合
-        // ページ検索
-        const results = await searchWikiPages(englishName);
-        // ページ名をパースし、分割カードのページとパース失敗したページを除外
-        const parsed = results
-            .map((name) => parsePageNameToCardName(name))
-            .filter((p) => p !== undefined && !p.isSplit);
-        // 判定
-        if (parsed.length === 1) {
-            const p = parsed[0];
+): Promise<{
+    cardName: CardName | CardName[];
+    choices: string[];
+    info: string | undefined;
+}> {
+    // wiki検索
+    const isMultiFaced = Array.isArray(englishName);
+    const results = await searchWikiPages(
+        !isMultiFaced
+            ? englishName
+            : toPageName(englishName.map((en) => ({ englishName: en }))),
+    );
+    // パース
+    const parsed = results.pages
+        .map((r) => {
+            const p = parsePageNameToCardName(r);
             if (p === undefined) {
+                console.warn(`Failed to parse page name: "${r}"`);
+            }
+            return p;
+        })
+        .filter((p) => p !== undefined);
+    // 判定
+    if (!isMultiFaced) {
+        // 分割カードのページでなく、英語名が一致しているもの
+        const filtered = parsed
+            .filter((p) => !p.isSplit)
+            .filter((p) => p.cardName.englishName === englishName);
+        // 該当1件
+        if (filtered.length === 1) {
+            const f0 = filtered[0];
+            if (f0 === undefined) {
                 throw new Error();
             }
-            return p.cardName;
+            return {
+                cardName: f0.cardName,
+                choices: results.pages,
+                info: undefined,
+            };
         } else {
-            // TODO: - 普通に検索してヒットしない場合は次元カード・プレイテストカードで検索する
-            const _temp = "[" + results.map((s) => `'${s}'`).join(", ") + "]";
-            const msg = `Failed to get japanese name (searchResult=${_temp})`;
-            console.warn(msg);
-            return { info: msg };
+            return {
+                cardName: { englishName: englishName, japaneseName: undefined },
+                choices: results.pages,
+                info: "Failed to determine a page of the card",
+            };
         }
     } else {
-        // マルチフェイスの場合
-        const pageName = getPageNameOfCard(
-            englishName.map((en) => ({ englishName: en })),
-        );
-        const results = await searchWikiPages(pageName);
-        // ページ名のパース
-        const parsed = results
-            .map((name) => parsePageNameToCardName(name))
-            .filter((p) => p !== undefined && p.isSplit);
-        // 判定
-        if (parsed.length === 1) {
-            const p = parsed[0];
-            if (p === undefined) {
+        // 分割カードのページで、英語名が一致しているもの
+        const filtered = parsed
+            .filter((p) => p.isSplit)
+            .filter((p) => p.cardName.join("+") === englishName.join("+"));
+        if (filtered.length === 1) {
+            const f0 = filtered[0];
+            if (f0 === undefined) {
                 throw new Error();
             }
-            return p.cardNames;
+            return {
+                cardName: f0.cardName,
+                choices: results.pages,
+                info: undefined,
+            };
         } else {
-            // TODO: - 普通に検索してヒットしない場合は次元カード・プレイテストカードで検索する
-            const _temp = "[" + results.map((s) => `'${s}'`).join(", ") + "]";
-            const msg = `Failed to get japanese name (searchResult=${_temp})`;
-            console.warn(msg);
-            return { info: msg };
+            return {
+                cardName: englishName.map((en) => ({
+                    englishName: en,
+                    japaneseName: undefined,
+                })),
+                choices: results.pages,
+                info: "Failed to determine a page of the card",
+            };
         }
     }
 }
 
 /** mtgwikiで日本語名から英語名を取得する */
-export async function getEnglishName(japaneseName: string): Promise<string> {
+export async function getEnglishNameFromMtgWiki(
+    japaneseName: string,
+): Promise<string> {
     const pages = await searchWikiPages(japaneseName);
     // TODO: 検索結果から英語名を判定する
     // - 分割カード・次元カード・プレイテストカードの場合...
@@ -125,7 +162,7 @@ export async function getEnglishName(japaneseName: string): Promise<string> {
 }
 
 /** カード名のmtgwiki表記を返す */
-export function getPageNameOfCard(
+export function toPageName(
     cardName: CardName | CardName[],
     options?: { planar?: boolean; playtest?: boolean },
 ): string {
@@ -161,7 +198,7 @@ export function getPageNameOfCard(
 
 type SplittedParseResult = {
     isSplit: true;
-    cardNames: Required<CardName>[];
+    cardName: Required<CardName>[];
     isPlanar: boolean;
     isPlaytest: boolean;
 };
@@ -238,7 +275,7 @@ export function parsePageNameToCardName(
             // 日本語名なし
             return {
                 isSplit: true,
-                cardNames: ennames.map((en) => ({
+                cardName: ennames.map((en) => ({
                     englishName: en,
                     japaneseName: undefined,
                 })),
@@ -253,7 +290,7 @@ export function parsePageNameToCardName(
 
             return {
                 isSplit: true,
-                cardNames: ennames.map((en, idx) => ({
+                cardName: ennames.map((en, idx) => ({
                     englishName: en,
                     japaneseName: jpnames[idx],
                 })),

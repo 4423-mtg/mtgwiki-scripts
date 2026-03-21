@@ -2,11 +2,16 @@ import { ScryfallCard } from "@scryfall/api-types";
 import { readFileSync, writeFileSync } from "node:fs";
 import { setTimeout } from "node:timers/promises";
 
-import { CardName, isCardName } from "../lib/commonTypes.js";
-import { getJapaneseName } from "../lib/mtgwiki.js";
+import { CardName } from "../lib/commonTypes.js";
+import { getJapaneseNameFromMtgWiki } from "../lib/mtgwiki.js";
 import { fetchOracleCardsBulkData } from "../lib/scryfall.js";
 
-type DictEntry = { japaneseName: string | undefined; info?: string };
+type DictEntry = {
+    japaneseName: string | undefined;
+    choices: string[] | undefined;
+    source: "mtgwiki" | "cache";
+    info: string | undefined;
+};
 type Dictionary = Record<string, DictEntry>;
 
 async function main() {
@@ -44,21 +49,25 @@ async function main() {
         console.log(`[name: "${c.name}"]`);
 
         // 日本語名を解決する
-        const ret = await resolveJpName(c, cache);
-        console.log(JSON.stringify(ret));
+        const resolved = await resolveJpName(c, cache);
+        console.log(JSON.stringify(resolved));
 
-        // 辞書に追加
-        const _dictEntry = (cardName: CardName): DictEntry =>
-            ret.info === undefined
-                ? { japaneseName: cardName.japaneseName }
-                : { japaneseName: cardName.japaneseName, info: ret.info };
-        if (Array.isArray(ret.cardName)) {
-            ret.cardName.forEach((cardName) => {
-                dict[cardName.englishName] = _dictEntry(cardName);
-            });
-        } else {
-            dict[ret.cardName.englishName] = _dictEntry(ret.cardName);
+        // 辞書用エントリ
+        function _dictEntry(jp: string | undefined): DictEntry {
+            return {
+                japaneseName: jp,
+                choices: resolved.choices,
+                source: resolved.source,
+                info: resolved.info,
+            };
         }
+        // 辞書に追加する
+        const temp = Array.isArray(resolved.cardName)
+            ? resolved.cardName
+            : [resolved.cardName];
+        temp.forEach((cardName) => {
+            dict[cardName.englishName] = _dictEntry(cardName.japaneseName);
+        });
 
         // 保存
         writeFileSync(
@@ -67,7 +76,7 @@ async function main() {
         );
 
         // フェッチした場合は5秒空ける
-        if (ret.fetched) {
+        if (resolved.source === "mtgwiki") {
             await setTimeout(5 * 1000);
         }
     }
@@ -106,11 +115,10 @@ async function resolveJpName(
     cache: Record<string, string>,
 ): Promise<{
     cardName: CardName | CardName[];
-    info?: string;
-    fetched: boolean;
+    choices: string[] | undefined;
+    source: "mtgwiki" | "cache";
+    info: string | undefined;
 }> {
-    const cached_ennames = Object.keys(cache);
-
     if (!("card_faces" in card)) {
         // 通常レイアウトの場合
         const cached = cache[card.name];
@@ -118,50 +126,43 @@ async function resolveJpName(
         if (cached !== undefined) {
             return {
                 cardName: { englishName: card.name, japaneseName: cached },
-                fetched: false,
+                choices: undefined,
+                source: "cache",
+                info: undefined,
             };
         }
         // mtgwikiから日本語名を取得する
-        const fetched = await getJapaneseName(card.name);
-        return isCardName(fetched)
-            ? {
-                  cardName: fetched,
-                  fetched: true,
-              }
-            : {
-                  cardName: { englishName: card.name, japaneseName: undefined },
-                  info: fetched.info,
-                  fetched: true,
-              };
+        const fetched = await getJapaneseNameFromMtgWiki(card.name);
+        return {
+            cardName: fetched.cardName,
+            choices: fetched.choices,
+            source: "mtgwiki",
+            info: fetched.info,
+        };
     } else {
         // マルチフェイスの場合
         // 英語名
         const faceNames = card.card_faces.map((f) => f.name);
-        // 判定
-        if (faceNames.every((n) => cached_ennames.includes(n))) {
+        // キャッシュがあれば使う
+        if (faceNames.every((n) => Object.keys(cache).includes(n))) {
             return {
                 cardName: faceNames.map((en) => ({
                     englishName: en,
                     japaneseName: cache[en],
                 })),
-                fetched: false,
+                choices: undefined,
+                source: "cache",
+                info: undefined,
             };
         }
         // mtgwikiから日本語名を取得する
-        const fetched = await getJapaneseName(faceNames);
-        return Array.isArray(fetched)
-            ? {
-                  cardName: fetched,
-                  fetched: true,
-              }
-            : {
-                  cardName: faceNames.map((en) => ({
-                      englishName: en,
-                      japaneseName: undefined,
-                  })),
-                  info: fetched.info,
-                  fetched: true,
-              };
+        const fetched = await getJapaneseNameFromMtgWiki(faceNames);
+        return {
+            cardName: fetched.cardName,
+            choices: fetched.choices,
+            source: "mtgwiki",
+            info: fetched.info,
+        };
     }
 }
 
