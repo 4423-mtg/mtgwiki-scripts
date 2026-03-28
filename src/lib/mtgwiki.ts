@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { CardName } from "./commonTypes.js";
 import { setTimeout } from "node:timers/promises";
+import { ScryfallCard } from "@scryfall/api-types";
 
 /** wikiページ検索 */
 export async function searchWikiPages(
@@ -70,103 +71,89 @@ export async function searchWikiPages(
     }
 }
 
-/** mtgwikiで英語名から日本語名を取得する */
-export async function getJapaneseNameFromMtgWiki(
-    englishName: string,
+export async function getJapaneseNameOfNonSplitCardFromMtgWiki(
+    name: string,
     option?: { retry?: boolean; maxRetry?: number; interval?: number },
-): Promise<{ cardName: CardName; choices: string[]; info: string | undefined }>;
-export async function getJapaneseNameFromMtgWiki(
-    englishName: string[],
+): Promise<{
+    cardName: CardName;
+    choices: string[];
+    info: string | undefined;
+}> {
+    const results = await searchWikiPages(name, option);
+    const parsed = results.pages
+        .map((ret) => parsePageNameToCardName(ret))
+        .filter((ret) => ret !== undefined);
+    const filtered = parsed
+        .filter((p) => !p.isSplit)
+        .filter(
+            (p) =>
+                // アンダーバーを含む名前への対応
+                p.cardName.englishName.replaceAll(/＿+/g, "_") ===
+                name.replaceAll(/_+/g, "_"),
+        );
+    // 該当1件
+    if (filtered.length === 1) {
+        const f0 = filtered[0];
+        if (f0 === undefined) {
+            throw new Error();
+        }
+        return {
+            cardName: f0.cardName,
+            choices: results.pages,
+            info: undefined,
+        };
+    } else {
+        return {
+            cardName: { englishName: name, japaneseName: undefined },
+            choices: results.pages,
+            info: "Failed to determine a page of the card",
+        };
+    }
+}
+
+export async function getJapaneseNameOfSplitCardFromMtgWiki(
+    name: string[],
     option?: { retry?: boolean; maxRetry?: number; interval?: number },
 ): Promise<{
     cardName: CardName[];
     choices: string[];
     info: string | undefined;
-}>;
-export async function getJapaneseNameFromMtgWiki(
-    englishName: string | string[],
-    option?: { retry?: boolean; maxRetry?: number; interval?: number },
-): Promise<{
-    cardName: CardName | CardName[];
-    choices: string[];
-    info: string | undefined;
 }> {
-    // wiki検索
-    const isMultiFaced = Array.isArray(englishName);
-    const results = await searchWikiPages(
-        !isMultiFaced
-            ? englishName
-            : toPageName(englishName.map((en) => ({ englishName: en }))),
-        option,
-    );
-    // パース
+    const query = toPageName(name.map((n) => ({ englishName: n })));
+    const results = await searchWikiPages(query, option);
     const parsed = results.pages
-        .map((r) => {
-            const p = parsePageNameToCardName(r);
-            if (p === undefined) {
-                console.warn(`Failed to parse page name: "${r}"`);
-            }
-            return p;
-        })
-        .filter((p) => p !== undefined);
-    // 判定
-    if (!isMultiFaced) {
-        // 分割カードのページでなく、英語名が一致しているもの
-        const filtered = parsed
-            .filter((p) => !p.isSplit)
-            .filter(
-                (p) =>
-                    // アンダーバーを含む名前への対応
-                    p.cardName.englishName.replaceAll(/＿+/g, "_") ===
-                    englishName.replaceAll(/_+/g, "_"),
-            );
-        // 該当1件
-        if (filtered.length === 1) {
-            const f0 = filtered[0];
-            if (f0 === undefined) {
-                throw new Error();
-            }
-            return {
-                cardName: f0.cardName,
-                choices: results.pages,
-                info: undefined,
-            };
-        } else {
-            return {
-                cardName: { englishName: englishName, japaneseName: undefined },
-                choices: results.pages,
-                info: "Failed to determine a page of the card",
-            };
+        .map((ret) => parsePageNameToCardName(ret))
+        .filter((ret) => ret !== undefined);
+    const filtered = parsed
+        .filter((p) => p.isSplit)
+        .filter(
+            (p) =>
+                p.cardName.length === name.length &&
+                p.cardName.every(
+                    (cardName, i) => cardName.englishName === name[i],
+                ),
+        );
+    // 該当1件
+    if (filtered.length === 1) {
+        const f0 = filtered[0];
+        if (f0 === undefined) {
+            throw new Error();
         }
+
+        return {
+            cardName: f0.cardName,
+            choices: results.pages,
+            info: undefined,
+        };
     } else {
-        // 分割カードのページで、英語名が一致しているもの
-        const filtered = parsed
-            .filter((p) => p.isSplit)
-            .filter(
-                (p) =>
-                    p.cardName.map((cn) => cn.englishName).join("+") ===
-                    englishName.join("+"),
-            );
-        if (filtered.length === 1) {
-            const f0 = filtered[0];
-            if (f0 === undefined) {
-                throw new Error();
-            }
-            return {
-                cardName: f0.cardName,
-                choices: results.pages,
-                info: undefined,
-            };
-        } else {
-            return {
-                cardName: englishName.map((en) => ({
-                    englishName: en,
-                    japaneseName: undefined,
-                })),
-                choices: results.pages,
-                info: "Failed to determine a page of the card",
-            };
-        }
+        return {
+            cardName: name.map((en) => ({
+                englishName: en,
+                japaneseName: undefined,
+            })),
+            choices: results.pages,
+            info: "Failed to determine a page of the card",
+        };
     }
 }
 

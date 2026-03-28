@@ -2,7 +2,10 @@ import { ScryfallCard } from "@scryfall/api-types";
 import { readFileSync, writeFileSync } from "node:fs";
 import { setTimeout } from "node:timers/promises";
 
-import { getJapaneseNameFromMtgWiki } from "../lib/mtgwiki.js";
+import {
+    getJapaneseNameOfNonSplitCardFromMtgWiki,
+    getJapaneseNameOfSplitCardFromMtgWiki,
+} from "../lib/mtgwiki.js";
 import { fetchOracleCardsBulkData } from "../lib/scryfall.js";
 
 type DictEntry = {
@@ -71,6 +74,9 @@ async function main() {
                 source: "annotation",
                 info: undefined,
             };
+            fetching = false;
+        } else if (card.name === "Sticker sheet") {
+            // skip
             fetching = false;
         } else if (!("card_faces" in card)) {
             // 通常カードの場合
@@ -181,7 +187,10 @@ async function resolveJapaneseNameOfSingleFaceCard(
 
     // mtgwikiから取得する
     const _getOption = { retry: true, maxRetry: 100 };
-    const fetched = await getJapaneseNameFromMtgWiki(card.name, _getOption);
+    const fetched = await getJapaneseNameOfNonSplitCardFromMtgWiki(
+        card.name,
+        _getOption,
+    );
     // console.log(JSON.stringify(fetched));
     return {
         result: {
@@ -272,7 +281,10 @@ async function resolveJapaneseNameOfMultiFaceCard(
     if (card.layout == "split") {
         // 分割カードの場合
         // 結合して1回で取得
-        const fetched = await getJapaneseNameFromMtgWiki(faceNames, _getOption);
+        const fetched = await getJapaneseNameOfSplitCardFromMtgWiki(
+            faceNames,
+            _getOption,
+        );
         // console.log(JSON.stringify(fetched));
         return {
             result: fetched.cardName.map((cardName) => ({
@@ -288,14 +300,15 @@ async function resolveJapaneseNameOfMultiFaceCard(
         };
     } else {
         // 分割カード以外の場合
-        // 各面別々に取得  FIXME: 別々に取得するかどうかはgetJapaneseNameFromMtgWikiの中にあるべき
+        // 各面別々に取得
         return {
             result: await Promise.all(
                 faceNames.map(async (name) => {
-                    const fetched = await getJapaneseNameFromMtgWiki(
-                        name,
-                        _getOption,
-                    );
+                    const fetched =
+                        await getJapaneseNameOfNonSplitCardFromMtgWiki(
+                            name,
+                            _getOption,
+                        );
                     // console.log(JSON.stringify(fetched));
                     return {
                         name: name,

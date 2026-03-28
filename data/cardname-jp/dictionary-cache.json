@@ -95350,30 +95350,7 @@
     "source": "cache"
   },
   "________ Goblin": {
-    "choices": [
-      "\"Name Sticker\" Goblin",
-      "Goblin Assault",
-      "Goblin Bookie",
-      "Goblin Bowling Team",
-      "Goblin Caves",
-      "Goblin Chirurgeon",
-      "Goblin Commando",
-      "Goblin Coward Parade",
-      "Goblin Flotilla",
-      "Goblin Kites",
-      "Goblin Lyre",
-      "Goblin Mime",
-      "Goblin Polka Band",
-      "Goblin S.W.A.T. Team",
-      "Goblin Sappers",
-      "Goblin Secret Agent",
-      "Goblin Settler",
-      "Goblin Ski Patrol",
-      "Goblin Sleigh Ride",
-      "Goblin Tutor"
-    ],
-    "source": "mtgwiki",
-    "info": "Failed to determine a page of the card"
+    "source": "annotation"
   },
   "Clandestine Chameleon": {
     "japaneseName": "秘密のカメレオン",
@@ -129273,11 +129250,6 @@
     "japaneseName": "アモンケット・サーキット",
     "source": "cache"
   },
-  "Sticker sheet": {
-    "choices": [],
-    "source": "mtgwiki",
-    "info": "Failed to determine a page of the card"
-  },
   "Deadpool, Trading Card": {
     "choices": [
       "Deadpool, Trading Card"
@@ -144757,5 +144729,40 @@
     "choices": [],
     "source": "mtgwiki",
     "info": "Failed to determine a page of the card"
+  },
+  "Thunderbolts Conspiracy": {
+    "japaneseName": "サンダーボルツの陰謀",
+    "choices": [
+      "サンダーボルツの陰謀/Thunderbolts Conspiracy"
+    ],
+    "source": "mtgwiki"
+  },
+  "Namor the Sub-Mariner": {
+    "japaneseName": "サブマリナー、ネイモア",
+    "choices": [
+      "サブマリナー、ネイモア/Namor the Sub-Mariner"
+    ],
+    "source": "mtgwiki"
+  },
+  "The Coming of Galactus": {
+    "japaneseName": "ギャラクタス襲来",
+    "choices": [
+      "ギャラクタス襲来/The Coming of Galactus"
+    ],
+    "source": "mtgwiki"
+  },
+  "Attuma, Atlantean Warlord": {
+    "japaneseName": "アトランティスの将軍、アットゥマ",
+    "choices": [
+      "アトランティスの将軍、アットゥマ/Attuma, Atlantean Warlord"
+    ],
+    "source": "mtgwiki"
+  },
+  "Doom Reigns Supreme": {
+    "japaneseName": "ドゥームの絶対統治",
+    "choices": [
+      "ドゥームの絶対統治/Doom Reigns Supreme"
+    ],
+    "source": "mtgwiki"
   }
 }
