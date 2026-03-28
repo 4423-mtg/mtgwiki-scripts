@@ -1,16 +1,11 @@
 // カードを、記号を除いた日本語名の文字数でソートする
 
 import * as fs from "node:fs";
-import { type ScryfallCard, type ScryfallCardFace } from "@scryfall/api-types";
-import * as scryfall from "../old/scryfall.js";
+import { type ScryfallCard } from "@scryfall/api-types";
+import { DictEntry } from "../lib/dictionary.js";
 
 const file_oraclecards = "./data/oracle-cards-20250823211001.json";
 const file_jpname = "./data/jpname.json";
-type DictEntry = {
-    name: string;
-    jpname: string | undefined;
-    info: "error" | "nojpname" | "nopage" | "manypages" | undefined;
-};
 
 function load_oraclecards(): ScryfallCard.Any[] {
     const text = fs.readFileSync(file_oraclecards, "utf-8");

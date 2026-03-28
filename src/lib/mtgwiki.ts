@@ -1,7 +1,6 @@
 import * as cheerio from "cheerio";
 import { CardName } from "./commonTypes.js";
 import { setTimeout } from "node:timers/promises";
-import { ScryfallCard } from "@scryfall/api-types";
 
 /** wikiページ検索 */
 export async function searchWikiPages(
@@ -215,6 +214,7 @@ type NotSplittedParseResult = {
     isPlanar: boolean;
     isPlaytest: boolean;
 };
+
 /** mtgwikiのページ名をパースしてカード名を得る。 */
 export function parsePageNameToCardName(
     pageName: string,

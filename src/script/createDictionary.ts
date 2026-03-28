@@ -1,24 +1,23 @@
 import { ScryfallCard } from "@scryfall/api-types";
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { setTimeout } from "node:timers/promises";
 
 import {
     getJapaneseNameOfNonSplitCardFromMtgWiki,
     getJapaneseNameOfSplitCardFromMtgWiki,
 } from "../lib/mtgwiki.js";
-import { fetchOracleCardsBulkData } from "../lib/scryfall.js";
-
-type DictEntry = {
-    japaneseName: string | undefined;
-    choices: string[] | undefined;
-    source: "mtgwiki" | "cache" | "annotation";
-    info: string | undefined;
-};
-type Dictionary = Record<string, DictEntry>;
+import {
+    DictEntry,
+    Dictionary,
+    getOracleCards,
+    readAnnotation,
+    readDictionaryCache,
+    readJpNameCache,
+} from "../lib/dictionary.js";
 
 async function main() {
     // カードデータ
-    const cards = await getCards(false);
+    const cards = await getOracleCards(false);
 
     // 非対象カードを除外する (-> scryfall.ts, parseCardType)
     const cards_filtered = cards.filter(
@@ -324,48 +323,6 @@ async function resolveJapaneseNameOfMultiFaceCard(
             fetched: true,
         };
     }
-}
-
-/** カードデータ取得。
- * キャッシュを読むか、またはScryfallからオラクルカードデータを取得する */
-async function getCards(
-    useCache: boolean,
-    cacheFile: string | undefined = undefined,
-): Promise<ScryfallCard.Any[]> {
-    if (useCache) {
-        if (cacheFile === undefined) {
-            throw new Error();
-        }
-        return JSON.parse(readFileSync(cacheFile, { encoding: "utf-8" }));
-    } else {
-        const data = await fetchOracleCardsBulkData();
-        if (data === undefined) {
-            throw new Error();
-        }
-        return data;
-    }
-}
-
-/** 既存の `Record<[英語名], [日本語名]>` 形式のデータを読む */
-function readJpNameCache(filepath: string): Record<string, string> {
-    const data = JSON.parse(readFileSync(filepath, { encoding: "utf-8" }));
-    return data;
-}
-
-/** 既存の辞書データを読む */
-function readDictionaryCache(filepath: string): Dictionary {
-    const data: Dictionary = JSON.parse(
-        readFileSync(filepath, { encoding: "utf-8" }),
-    );
-    return data;
-}
-
-/** アノテーションを読む */
-function readAnnotation(filepath: string) {
-    const data: Record<string, { japaneseName?: string }> = JSON.parse(
-        readFileSync(filepath, { encoding: "utf-8" }),
-    );
-    return data;
 }
 
 await main();
