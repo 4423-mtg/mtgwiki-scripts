@@ -1,11 +1,11 @@
 import * as cheerio from "cheerio";
-import { HTTPError, type DictEntry } from "../types/dict.js";
 import { CardName } from "./commonTypes.js";
+import { setTimeout } from "node:timers/promises";
 
 /** wikiページ検索 */
 export async function searchWikiPages(
     name: string,
-    option: { retry?: boolean; maxRetry?: number; interval?: number } = {},
+    option?: { retry?: boolean; maxRetry?: number; interval?: number },
 ): Promise<{ pages: string[]; info: string | undefined }> {
     const URL = `http://mtgwiki.com/index.php?fulltext=Search&redirs=1&search=${encodeURIComponent(
         name,
@@ -15,10 +15,10 @@ export async function searchWikiPages(
     // フェッチ
     let text: string | undefined = undefined;
     let tryCount = 0;
-    const _max = option?.maxRetry ?? 10;
+    const _max = option?.maxRetry ?? undefined;
     while (true) {
         console.info(
-            `search for page "${name}"... (${new Date().toLocaleTimeString()})`,
+            `search with "${name}"... (${new Date().toLocaleTimeString()})`,
         );
 
         tryCount++;
@@ -29,7 +29,12 @@ export async function searchWikiPages(
         } else {
             console.error(`HTTPError: ${response.status}, ${URL}`);
             // TODO: 4xx, 5xxエラー
-            if (option?.retry === true && tryCount < _max) {
+            if (
+                option?.retry === true &&
+                (_max === undefined || tryCount < _max)
+            ) {
+                console.log("retrying...");
+                await setTimeout(option.interval ?? 60 * 1000);
                 continue;
             } else {
                 break;
@@ -60,6 +65,7 @@ export async function searchWikiPages(
         }
         return { pages: hit_page_names, info: undefined };
     } else {
+        console.warn(`No Search Result: "${name}"`);
         return { pages: [], info: undefined };
     }
 }
@@ -67,9 +73,11 @@ export async function searchWikiPages(
 /** mtgwikiで英語名から日本語名を取得する */
 export async function getJapaneseNameFromMtgWiki(
     englishName: string,
+    option?: { retry?: boolean; maxRetry?: number; interval?: number },
 ): Promise<{ cardName: CardName; choices: string[]; info: string | undefined }>;
 export async function getJapaneseNameFromMtgWiki(
     englishName: string[],
+    option?: { retry?: boolean; maxRetry?: number; interval?: number },
 ): Promise<{
     cardName: CardName[];
     choices: string[];
@@ -77,6 +85,7 @@ export async function getJapaneseNameFromMtgWiki(
 }>;
 export async function getJapaneseNameFromMtgWiki(
     englishName: string | string[],
+    option?: { retry?: boolean; maxRetry?: number; interval?: number },
 ): Promise<{
     cardName: CardName | CardName[];
     choices: string[];
@@ -88,6 +97,7 @@ export async function getJapaneseNameFromMtgWiki(
         !isMultiFaced
             ? englishName
             : toPageName(englishName.map((en) => ({ englishName: en }))),
+        option,
     );
     // パース
     const parsed = results.pages
@@ -104,7 +114,12 @@ export async function getJapaneseNameFromMtgWiki(
         // 分割カードのページでなく、英語名が一致しているもの
         const filtered = parsed
             .filter((p) => !p.isSplit)
-            .filter((p) => p.cardName.englishName === englishName);
+            .filter(
+                (p) =>
+                    // アンダーバーを含む名前への対応
+                    p.cardName.englishName.replaceAll(/＿+/g, "_") ===
+                    englishName.replaceAll(/_+/g, "_"),
+            );
         // 該当1件
         if (filtered.length === 1) {
             const f0 = filtered[0];
@@ -127,7 +142,11 @@ export async function getJapaneseNameFromMtgWiki(
         // 分割カードのページで、英語名が一致しているもの
         const filtered = parsed
             .filter((p) => p.isSplit)
-            .filter((p) => p.cardName.join("+") === englishName.join("+"));
+            .filter(
+                (p) =>
+                    p.cardName.map((cn) => cn.englishName).join("+") ===
+                    englishName.join("+"),
+            );
         if (filtered.length === 1) {
             const f0 = filtered[0];
             if (f0 === undefined) {
@@ -154,8 +173,9 @@ export async function getJapaneseNameFromMtgWiki(
 /** mtgwikiで日本語名から英語名を取得する */
 export async function getEnglishNameFromMtgWiki(
     japaneseName: string,
+    option?: { retry?: boolean; maxRetry?: number; interval?: number },
 ): Promise<string> {
-    const pages = await searchWikiPages(japaneseName);
+    const pages = await searchWikiPages(japaneseName, option);
     // TODO: 検索結果から英語名を判定する
     // - 分割カード・次元カード・プレイテストカードの場合...
     return "";
@@ -251,7 +271,7 @@ export function parsePageNameToCardName(
 
     // 正規表現でパース
     const regexp = new RegExp(
-        /^((?<jpname>.*)\/)?(?<enname>.*)( *\((?<annotation>.*)\))? *$/,
+        /^((?<jpname>.*)\/)?(?<enname>.*?)( *\((?<annotation>.*)\))? *$/,
     );
     const match = pageName.match(regexp);
     if (match === null) {
