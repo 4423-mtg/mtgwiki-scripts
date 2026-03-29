@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import { CardName } from "./commonTypes.js";
 import { setTimeout } from "node:timers/promises";
 import { ScryfallCard } from "@scryfall/api-types";
+import { Dictionary } from "./dictionary.js";
 
 // MARK: searchWikiPages
 /** wikiページ検索 */
@@ -72,6 +73,8 @@ export async function searchWikiPages(
     }
 }
 
+// MARK: getJapaneseName
+/** カードの日本語名を取得する */
 export async function getJapaneseNameFromMtgWiki(
     card: ScryfallCard.Any,
     option?: { retry?: boolean; maxRetry?: number; interval?: number },
@@ -107,7 +110,8 @@ export async function getJapaneseNameFromMtgWiki(
     }
 }
 
-// MARK: getJapaneseNameOfNonSplitCardFromMtgWiki
+// MARK: getJapaneseNameOfNonSplitCard
+/** 分割カードでないカードの日本語名を取得する */
 export async function getJapaneseNameOfNonSplitCardFromMtgWiki(
     name: string,
     option?: { retry?: boolean; maxRetry?: number; interval?: number },
@@ -148,7 +152,8 @@ export async function getJapaneseNameOfNonSplitCardFromMtgWiki(
     }
 }
 
-// MARK: getJapaneseNameOfSplitCardFromMtgWiki
+// MARK: getJapaneseNameOfSplitCard
+/** 分割カードの日本語名を取得する */
 export async function getJapaneseNameOfSplitCardFromMtgWiki(
     name: string[],
     option?: { retry?: boolean; maxRetry?: number; interval?: number },
@@ -195,8 +200,8 @@ export async function getJapaneseNameOfSplitCardFromMtgWiki(
     }
 }
 
-// MARK: getEnglishNameFromMtgWiki
-/** mtgwikiで日本語名から英語名を取得する */
+// MARK: getEnglishName
+/** 日本語名から英語名を取得する */
 export async function getEnglishNameFromMtgWiki(
     japaneseName: string,
     option?: { retry?: boolean; maxRetry?: number; interval?: number },
@@ -240,6 +245,22 @@ export function toPageName(
         ret += " (playtest)"; // FIXME: playtest / Playtest
     }
     return ret;
+}
+
+export function getCardName(name: string, dictionary: Dictionary): string {
+    const entry = dictionary[name];
+    if (entry === undefined) {
+        console.warn(`"${name}" is not included in the dictionary`);
+        return name;
+    }
+
+    const japaneseName = entry.japaneseName;
+    if (japaneseName === undefined) {
+        console.warn(`"${name}" has no japanese name`);
+        return name;
+    }
+
+    return toPageName({ englishName: name, japaneseName: japaneseName });
 }
 
 // MARK: ParseResult
