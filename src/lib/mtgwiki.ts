@@ -1,7 +1,9 @@
 import * as cheerio from "cheerio";
 import { CardName } from "./commonTypes.js";
 import { setTimeout } from "node:timers/promises";
+import { ScryfallCard } from "@scryfall/api-types";
 
+// MARK: searchWikiPages
 /** wikiページ検索 */
 export async function searchWikiPages(
     name: string,
@@ -70,6 +72,42 @@ export async function searchWikiPages(
     }
 }
 
+export async function getJapaneseNameFromMtgWiki(
+    card: ScryfallCard.Any,
+    option?: { retry?: boolean; maxRetry?: number; interval?: number },
+): Promise<
+    | {
+          cardName: CardName | CardName[];
+          choices: string[];
+          info: string | undefined;
+      }
+    | {
+          cardName: CardName;
+          choices: string[];
+          info: string | undefined;
+      }[]
+> {
+    if (!("card_faces" in card)) {
+        return getJapaneseNameOfNonSplitCardFromMtgWiki(card.name, option);
+    } else if (card.layout === "split") {
+        return getJapaneseNameOfSplitCardFromMtgWiki(
+            card.card_faces.map((face) => face.name),
+            option,
+        );
+    } else {
+        const promises = card.card_faces.map(
+            async (face) =>
+                await getJapaneseNameOfNonSplitCardFromMtgWiki(
+                    face.name,
+                    option,
+                ),
+        );
+        const results = await Promise.all(promises);
+        return results;
+    }
+}
+
+// MARK: getJapaneseNameOfNonSplitCardFromMtgWiki
 export async function getJapaneseNameOfNonSplitCardFromMtgWiki(
     name: string,
     option?: { retry?: boolean; maxRetry?: number; interval?: number },
@@ -110,6 +148,7 @@ export async function getJapaneseNameOfNonSplitCardFromMtgWiki(
     }
 }
 
+// MARK: getJapaneseNameOfSplitCardFromMtgWiki
 export async function getJapaneseNameOfSplitCardFromMtgWiki(
     name: string[],
     option?: { retry?: boolean; maxRetry?: number; interval?: number },
@@ -156,6 +195,7 @@ export async function getJapaneseNameOfSplitCardFromMtgWiki(
     }
 }
 
+// MARK: getEnglishNameFromMtgWiki
 /** mtgwikiで日本語名から英語名を取得する */
 export async function getEnglishNameFromMtgWiki(
     japaneseName: string,
@@ -202,6 +242,7 @@ export function toPageName(
     return ret;
 }
 
+// MARK: ParseResult
 type SplittedParseResult = {
     isSplit: true;
     cardName: Required<CardName>[];
@@ -215,6 +256,7 @@ type NotSplittedParseResult = {
     isPlaytest: boolean;
 };
 
+// MARK: parsePageNameToCardName
 /** mtgwikiのページ名をパースしてカード名を得る。 */
 export function parsePageNameToCardName(
     pageName: string,

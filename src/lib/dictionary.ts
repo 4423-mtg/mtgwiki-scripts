@@ -10,12 +10,6 @@ export type DictEntry = {
 };
 export type Dictionary = Record<string, DictEntry>;
 
-/** 既存の `Record<[英語名], [日本語名]>` 形式のデータを読む */
-export function readJpNameCache(filepath: string): Record<string, string> {
-    const data = JSON.parse(readFileSync(filepath, { encoding: "utf-8" }));
-    return data;
-}
-
 /** 既存の辞書データを読む */
 export function readDictionaryCache(filepath: string): Dictionary {
     const data: Dictionary = JSON.parse(

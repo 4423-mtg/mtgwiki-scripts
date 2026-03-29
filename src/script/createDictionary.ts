@@ -2,19 +2,17 @@ import { ScryfallCard } from "@scryfall/api-types";
 import { writeFileSync } from "node:fs";
 import { setTimeout } from "node:timers/promises";
 
-import {
-    getJapaneseNameOfNonSplitCardFromMtgWiki,
-    getJapaneseNameOfSplitCardFromMtgWiki,
-} from "../lib/mtgwiki.js";
+import { getJapaneseNameFromMtgWiki } from "../lib/mtgwiki.js";
 import {
     DictEntry,
     Dictionary,
     getOracleCards,
     readAnnotation,
     readDictionaryCache,
-    readJpNameCache,
 } from "../lib/dictionary.js";
+import { CardName } from "../lib/commonTypes.js";
 
+// MARK: main
 async function main() {
     // カードデータ
     const cards = await getOracleCards(false);
@@ -33,7 +31,8 @@ async function main() {
             c.set !== "unk" && // Unknown Event
             c.set !== "punk" && // Black Lotus Unknown Planechase
             c.set !== "pssc" && // Secret Lair Showcase Planes
-            c.type_line.match(/\bToken\b/) === null, // 役割トークン
+            c.type_line.match(/\bToken\b/) === null && // 役割トークン
+            c.name !== "Sticker sheet",
     );
 
     // 日付でソート
@@ -46,8 +45,6 @@ async function main() {
     // - 同日発売セット
     // - コレクター番号順にしておく
 
-    // 日本語名キャッシュ
-    const cache1 = readJpNameCache("./data/cardname-jp/cache1.json");
     // 辞書キャッシュ
     const dictCache = readDictionaryCache(
         "./data/cardname-jp/dictionary-cache.json",
@@ -66,6 +63,7 @@ async function main() {
         }
 
         let fetching: boolean = false;
+        // 英語名誤り
         if (card.name === "Ratonhnhaké꞉ton") {
             dict[card.name] = {
                 japaneseName: "ラドンハゲードン",
@@ -74,57 +72,34 @@ async function main() {
                 info: undefined,
             };
             fetching = false;
-        } else if (card.name === "Sticker sheet") {
-            // skip
-            fetching = false;
-        } else if (!("card_faces" in card)) {
-            // 通常カードの場合
-            const ret = await resolveJapaneseNameOfSingleFaceCard(card, {
-                japaneseNameCache: cache1,
-                dictionaryCache: dictCache,
-                annotation: annotationsCache,
-            });
-            console.log(
-                `[${index}] "${card.name}" => ${JSON.stringify(ret.result)}`,
-            );
-            dict[card.name] = ret.result;
-            if (
-                ret.result.japaneseName === undefined &&
-                ret.result.info !== undefined
-            ) {
-                toBeAnnotated[card.name] = {};
-                console.warn(
-                    `Have to Annotate: "${card.name}" (${ret.result.info})`,
-                );
-            }
-            fetching = ret.fetched;
         } else {
-            // マルチフェイスの場合
-            const ret = await resolveJapaneseNameOfMultiFaceCard(card, {
-                japaneseNameCache: cache1,
-                dictionaryCache: dictCache,
+            // 日本語名を解決する
+            const ret = await resolveJapaneseName(card, {
+                cache: dictCache,
                 annotation: annotationsCache,
             });
             for (const e of ret.result) {
                 console.log(
                     `[${index}] "${e.name}" => ${JSON.stringify(e.entry)}`,
                 );
+                // 辞書に追加する
                 dict[e.name] = e.entry;
+                // アノテーションが必要なカードのリストに追加する
                 if (
                     e.entry.japaneseName === undefined &&
                     e.entry.info !== undefined
                 ) {
                     toBeAnnotated[e.name] = {};
                     console.warn(
-                        `Have to Annotate: "${e.name}" (${e.entry.info})`,
+                        `Annotation needed: "${e.name}" (${e.entry.info})`,
                     );
                 }
             }
             fetching = ret.fetched;
         }
 
+        // フェッチした場合のみ保存
         if (fetching) {
-            // 保存
             writeFileSync(
                 "data/cardname-jp/dictionary.json",
                 JSON.stringify(dict, undefined, 2),
@@ -135,95 +110,33 @@ async function main() {
             );
             // フェッチした場合は5秒空ける
             await setTimeout(5 * 1000);
-
-            fetching = false;
         }
     }
 }
 
-/** シングルフェイスカードの日本語名を取得する */
-async function resolveJapaneseNameOfSingleFaceCard(
+/** 日本語名を解決する */
+async function resolveJapaneseName(
     card: ScryfallCard.Any,
     options?: {
-        japaneseNameCache?: Record<string, string>;
-        dictionaryCache?: Dictionary;
-        annotation?: Record<string, { japaneseName?: string }>;
-    },
-): Promise<{ result: DictEntry; fetched: boolean }> {
-    // アノテーション確認
-    const annotation = options?.annotation?.[card.name];
-    if (annotation !== undefined) {
-        return {
-            result: {
-                japaneseName: annotation?.japaneseName,
-                choices: undefined,
-                source: "annotation",
-                info: undefined,
-            },
-            fetched: false,
-        };
-    }
-
-    // 日本語名解決。日本語名キャッシュ確認
-    const jpcache = options?.japaneseNameCache?.[card.name];
-    if (jpcache !== undefined && jpcache !== "undefined") {
-        return {
-            result: {
-                japaneseName: jpcache,
-                choices: undefined,
-                source: "cache",
-                info: undefined,
-            },
-            fetched: false,
-        };
-    }
-
-    // 辞書キャッシュ確認
-    const dictCache = options?.dictionaryCache?.[card.name];
-    if (dictCache !== undefined && dictCache.info === undefined) {
-        return { result: dictCache, fetched: false };
-    }
-
-    // mtgwikiから取得する
-    const _getOption = { retry: true, maxRetry: 100 };
-    const fetched = await getJapaneseNameOfNonSplitCardFromMtgWiki(
-        card.name,
-        _getOption,
-    );
-    // console.log(JSON.stringify(fetched));
-    return {
-        result: {
-            japaneseName: fetched.cardName.japaneseName,
-            choices: fetched.choices,
-            source: "mtgwiki",
-            info: fetched.info,
-        },
-        fetched: true,
-    };
-}
-
-/** マルチフェイスカードの日本語名を取得する */
-async function resolveJapaneseNameOfMultiFaceCard(
-    card: ScryfallCard.Any,
-    options?: {
-        japaneseNameCache?: Record<string, string>;
-        dictionaryCache?: Dictionary;
+        cache?: Dictionary;
         annotation?: Record<string, { japaneseName?: string }>;
     },
 ): Promise<{ result: { name: string; entry: DictEntry }[]; fetched: boolean }> {
-    if (!("card_faces" in card)) {
-        throw new Error("no card_faces in the card");
-    }
-    const faceNames = card.card_faces.map((face) => face.name);
+    const names: string[] = !("card_faces" in card)
+        ? [card.name]
+        : card.card_faces.map((face) => face.name);
 
-    // アノテーション確認
-    const annotations = faceNames.map((name) => options?.annotation?.[name]);
-    if (annotations.every((ant) => ant !== undefined)) {
+    // アノテーションがあればそれを返す
+    const annotation = names.map((name) => ({
+        name: name,
+        annotation: options?.annotation?.[name],
+    }));
+    if (annotation.every((a) => a.annotation !== undefined)) {
         return {
-            result: faceNames.map((name, index) => ({
-                name: name,
+            result: annotation.map((a) => ({
+                name: a.name,
                 entry: {
-                    japaneseName: annotations[index]?.japaneseName,
+                    japaneseName: a.annotation?.japaneseName,
                     choices: undefined,
                     source: "annotation",
                     info: undefined,
@@ -233,60 +146,32 @@ async function resolveJapaneseNameOfMultiFaceCard(
         };
     }
 
-    // 日本語名キャッシュ確認
-    const jpcaches = faceNames.map(
-        (name) => options?.japaneseNameCache?.[name],
-    );
-    if (
-        jpcaches.every((jpname) => jpname !== undefined) &&
-        jpcaches.every((jpname) => jpname !== "undefined")
-    ) {
+    // 辞書キャッシュがあればそれを返す
+    const cache = names.map((name) => ({
+        name: name,
+        cache: options?.cache?.[name],
+    }));
+    if (cache.every((c) => c.cache !== undefined)) {
         return {
-            result: faceNames.map((name, index) => ({
-                name: name,
-                entry: {
-                    japaneseName: jpcaches[index],
-                    choices: undefined,
-                    source: "cache",
-                    info: undefined,
-                },
-            })),
-            fetched: false,
-        };
-    }
-
-    // 辞書キャッシュ確認
-    const dictCache = faceNames.map((name) => options?.dictionaryCache?.[name]);
-    if (
-        dictCache.every((dc) => dc !== undefined) &&
-        dictCache.every((dc) => dc.info === undefined)
-    ) {
-        return {
-            result: faceNames.map((name, index) => {
-                if (dictCache[index] === undefined) {
-                    throw new Error();
-                }
-                return {
-                    name: name,
-                    entry: dictCache[index],
-                };
-            }),
+            result: (cache as { name: string; cache: DictEntry }[]).map(
+                (c) => ({
+                    name: c.name,
+                    entry: c.cache,
+                }),
+            ),
             fetched: false,
         };
     }
 
     // mtgwikiから取得する
     const _getOption = { retry: true, maxRetry: 100 };
-    if (card.layout == "split") {
-        // 分割カードの場合
-        // 結合して1回で取得
-        const fetched = await getJapaneseNameOfSplitCardFromMtgWiki(
-            faceNames,
-            _getOption,
-        );
-        // console.log(JSON.stringify(fetched));
+    const fetched = await getJapaneseNameFromMtgWiki(card, _getOption);
+    if (!Array.isArray(fetched)) {
+        const _cardNames: CardName[] = Array.isArray(fetched.cardName)
+            ? fetched.cardName
+            : [fetched.cardName];
         return {
-            result: fetched.cardName.map((cardName) => ({
+            result: _cardNames.map((cardName) => ({
                 name: cardName.englishName,
                 entry: {
                     japaneseName: cardName.japaneseName,
@@ -298,28 +183,16 @@ async function resolveJapaneseNameOfMultiFaceCard(
             fetched: true,
         };
     } else {
-        // 分割カード以外の場合
-        // 各面別々に取得
         return {
-            result: await Promise.all(
-                faceNames.map(async (name) => {
-                    const fetched =
-                        await getJapaneseNameOfNonSplitCardFromMtgWiki(
-                            name,
-                            _getOption,
-                        );
-                    // console.log(JSON.stringify(fetched));
-                    return {
-                        name: name,
-                        entry: {
-                            japaneseName: fetched.cardName.japaneseName,
-                            choices: fetched.choices,
-                            source: "mtgwiki",
-                            info: fetched.info,
-                        },
-                    };
-                }),
-            ),
+            result: fetched.map((f) => ({
+                name: f.cardName.englishName,
+                entry: {
+                    japaneseName: f.cardName.englishName,
+                    choices: f.choices,
+                    source: "mtgwiki",
+                    info: f.info,
+                },
+            })),
             fetched: true,
         };
     }
