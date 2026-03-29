@@ -1,3 +1,8 @@
+- getOracleCard修正
+  - 再録なし
+  - 同日発売セットはセット別にする
+  - セット内はコレクター番号順
+
 # CR
 - フロー (GitHub Actions)
   1. GitHub Actionsで定期的にmtg-jpの日本語訳からデータを作る (test_cr.ts)
