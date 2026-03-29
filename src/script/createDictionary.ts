@@ -32,7 +32,8 @@ async function main() {
             c.set !== "punk" && // Black Lotus Unknown Planechase
             c.set !== "pssc" && // Secret Lair Showcase Planes
             c.type_line.match(/\bToken\b/) === null && // 役割トークン
-            c.name !== "Sticker sheet",
+            c.name !== "Sticker sheet" &&
+            c.name !== '"Name Sticker" Goblin',
     );
 
     // 日付でソート

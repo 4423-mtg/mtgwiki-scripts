@@ -11,17 +11,17 @@
 
 # Dictionary
 - dictionary.jsonをGitHub Actionsでリリースする
+- 注
+  - `"`はmediawikiで検索不可のためすべてannotation.jsonに書く
+  - scryfallのカード名が間違っているものは連絡する
+    - "Ratonhnhaké꞉ton"
+    - "With Great Power..."
+  - WisdomGuildに日本語名が登録されていないものは互換のためページが残っている
+    - "Embiggen"
+  - アリーナ等で準公式日本語名があるものは複数ページが有る場合がある
+    - "Goblin Commando"
+    - "Carnage Interpreter"
 - TODO:
-  - プレイテストの playtest/Playtest 表記ゆれを直す
   - annotation.json修正
     - アーカム・ダクソン
-    - 日本語名獲得カード
-      - MagicFactoryとの連携用に残してあるものに注意
-    - 英語名表記ゆれカード (`...`)
-    - Scryfallの英語名が間違っているカード
-      - `With Great Power . . .`
-    - playtestの出来事
-    - Universe Within
-    - `"`
-      - ヘンジー・トーリは行けてるのはなぜ？
 
