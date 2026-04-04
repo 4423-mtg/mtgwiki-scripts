@@ -12,6 +12,8 @@ jobs:
   # 3. if difference with them, release
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     strategy:
       matrix:
