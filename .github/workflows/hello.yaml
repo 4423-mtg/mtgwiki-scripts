@@ -34,9 +34,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Run
-        run: node dist/cr/test_cr.js
-
       # - name: Get Latest Release
       #   run: gh release download latest -p 'cr/*.json' # FIXME: filename
       #   env:

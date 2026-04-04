@@ -4,11 +4,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import {
     BodyItem,
     bodyItemToText,
-    crNumberToSectionNumber,
     DictItem,
     HeaderItem,
-    isNumberedLine,
-    parseCRNumber,
+    getCRNumber,
     parseTextBody,
     bodyItemToTocText,
     TocItem,
@@ -301,18 +299,22 @@ function parseAsBody(line: string): BodyItem | string | undefined {
         return undefined;
     }
     // 項番付きの行
-    if (isNumberedLine(line)) {
-        // FIXME: isNumberedLine で undefined を返す
+    const crNumber = getCRNumber(line);
+    if (
+        crNumber.major === undefined &&
+        crNumber.minor === undefined &&
+        crNumber.patch === undefined
+    ) {
+        // 項番のない行
+        const text = line.trim();
+        return text;
+    } else {
         return {
             part: "body",
             text: line,
-            crNumber: parseCRNumber(line),
+            crNumber: crNumber,
             noNumberText: parseTextBody(line),
         } as const;
-    } else {
-        // 項番のない行
-        const text = line.replace(/^\s+/, "");
-        return text;
     }
 }
 

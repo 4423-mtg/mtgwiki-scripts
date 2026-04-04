@@ -1,7 +1,5 @@
-import { mainModule } from "process";
-
 /** 項番行の頭から項番をキャプチャする */
-export function parseCRNumber(text: string): CRNumber {
+export function getCRNumber(text: string): CRNumber {
     const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
     const m = text.match(ptn);
     if (m === null) {
@@ -18,15 +16,10 @@ export function parseCRNumber(text: string): CRNumber {
         };
     }
 }
-/** 項番を除いたテキスト */ // TODO: 型付け
+/** 項番を除いたテキスト */ // FIXME: 上と統合する
 export function parseTextBody(text: string): string {
     const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
     return text.replace(ptn, "").replace(/^ */, "");
-}
-/** 番号付きの項番かどうか */ // FIXME: マッチオブジェクトを返す
-export function isNumberedLine(text: string): boolean {
-    const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
-    return text.match(ptn) !== null;
 }
 
 // =======================================================
