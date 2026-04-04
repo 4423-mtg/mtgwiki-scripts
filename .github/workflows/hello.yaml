@@ -1,4 +1,4 @@
-name: Actions Test
+name: Check CR
 
 on:
   push:
@@ -7,23 +7,38 @@ on:
     branches: ["main"]
 
 jobs:
-  build:
+  # 1. generate cr.json
+  # 2. diff against the latest
+  # 3. if difference with them, release
+  release:
     runs-on: ubuntu-latest
 
-    # strategy:
-    #   matrix:
-    #     node-version: [18.x, 20.x, 22.x]
+    strategy:
+      matrix:
+        node-version: [22.x]
 
     steps:
-      - run: echo 'Hello'
-      # - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      # - name: Use Node.js ${{ matrix.node-version }}
-      #   uses: actions/setup-node@v4
-      #   with:
-      #     node-version: ${{ matrix.node-version }}
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
 
-      # - name: Build
-      #   run: |
-      #     npm install
-      #     npx webpack
+      - name: Build
+        run: npm run build
+
+      - name: Run
+        run: node dist/cr/test_cr.js
+
+      # - name: Get Latest Release
+      #   run: gh release download latest -p 'cr/*.json' # FIXME: filename
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # - name: Diff
+      #   run:
+
+      - name: Generate CR
+        run: npm run gen_cr -- ./data/cr

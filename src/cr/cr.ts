@@ -21,7 +21,7 @@ export function parseTextBody(text: string): string {
     const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
     return text.replace(ptn, "").replace(/^ */, "");
 }
-/** 番号付きの項番かどうか */
+/** 番号付きの項番かどうか */ // FIXME: マッチオブジェクトを返す
 export function isNumberedLine(text: string): boolean {
     const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
     return text.match(ptn) !== null;
@@ -92,7 +92,7 @@ export type DictItem = {
 };
 
 /** 本文の項目をテキストに変換する */
-export function bodyItemToText(item: BodyItem): string | undefined {
+export function bodyItemToText(item: BodyItem): string {
     if (
         item.crNumber.major !== undefined &&
         parseInt(item.crNumber.major) < 100
