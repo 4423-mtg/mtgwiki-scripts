@@ -49,14 +49,14 @@ async function main() {
     // (3) 本文テキスト。1つの段落に\nなどで複数の項番が含まれているのでまず行で分割する
     console.info("Parsing into lines...");
     const lines: string[] = [];
-    main.children().each((i, e) => {
+    main.children().each((i: number, e) => {
         if (e.type !== "style") {
             lines.push(
                 ...$(e)
                     .text()
                     .split(/\n/g)
-                    .filter((p) => p !== "")
-                    .filter((p) => p.match(/^\s+$/) === null),
+                    .filter((p: string) => p !== "")
+                    .filter((p: string) => p.match(/^\s+$/) === null),
             );
         }
     });
