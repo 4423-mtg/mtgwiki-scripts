@@ -42,3 +42,8 @@ jobs:
 
       - name: Generate CR
         run: npm run gen_cr -- ./data/cr
+
+      - name: Release
+        run: gh release create v0.0.1 ./data/cr/*.txt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
