@@ -63,41 +63,53 @@ async function main() {
     console.info(`  => ${lines.length} lines`);
     saveFile("lines.txt", lines.join("\n"));
 
-    // MARK: main/parse
+    // MARK: main/パース
     // (4) 各行の内容を見て前書き・目次・ルール本文・用語集を判定しつつ段落ごとにまとめる
     const items: (HeaderItem | TocItem | BodyItem | DictItem)[] = [];
     let mode: Mode = "header";
+    console.log(`Parsing ${mode}...`);
 
-    lines.forEach((l) => {
+    for (const _line of lines) {
         // モード切替
-        if (l === "もくじ") {
+        if (mode === "header" && _line === "もくじ") {
             mode = "toc";
-        }
-        if (l === "マジック：ザ・ギャザリング　総合ルール") {
+            console.log(`Parsing ${mode}...`);
+            continue;
+        } else if (
+            mode === "toc" &&
+            _line === "マジック：ザ・ギャザリング　総合ルール"
+        ) {
             mode = "body";
-        }
-        if (l === "用語集") {
+            console.log(`Parsing ${mode}...`);
+            continue;
+        } else if (mode === "body" && _line === "用語集") {
             mode = "dict";
-        }
-        if (l === "クレジット") {
+            console.log(`Parsing ${mode}...`);
+            continue;
+        } else if (mode === "dict" && _line === "クレジット") {
             mode = "credit";
+            console.log(`Parsing ${mode}...`);
+            continue;
         }
+
         // 前書き
         if (mode === "header") {
-            items.push(parseAsHeader(l));
+            items.push(parseAsHeader(_line));
+            continue;
         }
         // 目次
         if (mode === "toc") {
-            const parsed = parseAsToc(l);
+            const parsed = parseAsToc(_line);
             if (parsed !== undefined) {
                 items.push(parsed);
             } else {
-                throw new Error(`Parse error: ${l}`);
+                throw new Error(`Parse error: ${_line}`);
             }
+            continue;
         }
         // 本文
         if (mode === "body") {
-            const parsed = parseAsBody(l);
+            const parsed = parseAsBody(_line);
             // 項番がある行
             if (typeof parsed === "object") {
                 items.push(parsed);
@@ -116,6 +128,19 @@ async function main() {
                         prevItem.text += parsed;
                         prevItem.noNumberText += parsed;
                     }
+                    // 「0. はじめに」の場合は独立したアイテムとして追加する
+                    else if (prevItem.crNumber.major === "0") {
+                        items.push({
+                            part: "body",
+                            text: parsed,
+                            crNumber: {
+                                major: prevItem.crNumber.major,
+                                minor: undefined,
+                                patch: undefined,
+                            },
+                            noNumberText: parsed,
+                        });
+                    }
                     // 改行付きで追加する
                     else {
                         prevItem.text += "\n" + parsed;
@@ -127,12 +152,13 @@ async function main() {
                     throw new Error();
                 }
             } else {
-                throw new Error(`Parse error: ${l}`);
+                throw new Error(`Parse error: ${_line}`);
             }
+            continue;
         }
         // 用語集
         if (mode === "dict") {
-            const parsed = parseAsDict(l);
+            const parsed = parseAsDict(_line);
             // 用語名の行
             if (typeof parsed === "object") {
                 items.push(parsed);
@@ -142,138 +168,120 @@ async function main() {
                 const prev = items.at(-1);
                 // 前の行が DictItem ならそれに追加する
                 if (prev !== undefined && prev.part === "dict") {
-                    prev.text = (prev.text.length > 0 ? "\n" : "") + parsed;
-                    prev.body = (prev.body.length > 0 ? "\n" : "") + parsed;
+                    prev.text += (prev.text.length > 0 ? "\n" : "") + parsed;
+                    prev.body += (prev.body.length > 0 ? "\n" : "") + parsed;
                 } else {
                     throw new Error();
                 }
             } else {
-                throw new Error(`Parse error: ${l}`);
+                throw new Error(`Parse error: ${_line}`);
             }
+            continue;
         }
-    });
+    }
 
-    // MARK: main/toText
+    // MARK: main/テキスト化
     // (5) テキスト化
-    let text: string[] = [];
-    let toc: string[] = [];
     const notice = [
         "このページの内容は、[https://mtg-jp.com/gameplay/rules マジック日本公式サイト]に掲載されているマジック総合ルール（和訳 20260116.0 版）を転記したものです。最新の総合ルールは公式サイトを参照してください。",
         "----",
     ].join("\n");
 
-    items.forEach((item, i) => {
-        const prevItem = items[i - 1];
-        switch (item.part) {
-            case "header":
-                text.push(item.text);
+    // header
+    const headerItems = items.filter((i) => i.part === "header");
+    const headerText: string[] = [
+        notice,
+        "",
+        ...headerItems.map((item) => item.text),
+        "",
+        "__NOTOC__",
+    ];
+    saveFile("header.txt", headerText.join("\n"));
+
+    // toc
+    const tocItems = items.filter((i) => i.part === "toc");
+    const tocText: string[] = [
+        notice,
+        "",
+        ...tocItems.map((item) => item.text),
+        "",
+        "__NOTOC__",
+    ];
+    saveFile("toc.txt", tocText.join("\n"));
+
+    // body
+    const sections: string[] = [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+    ];
+    for (const section of sections) {
+        const bodyItems = items
+            .filter((item) => item.part === "body")
+            .filter((item) => item.crNumber.major?.at(0) === section);
+        // 目次
+        const toc: string[] = [];
+        for (const item of bodyItems) {
+            const _t = bodyItemToTocText(item);
+            if (false) {
+                console.debug(`${item.text} => ${_t}`);
+            }
+            if (_t !== undefined) {
+                toc.push(_t);
+            }
+            if (section === "0") {
                 break;
-            case "toc":
-                if (items[i - 1]?.part === "header") {
-                    // header.txt
-                    saveFile(
-                        "header.txt",
-                        [notice, "", ...text, "", "__NOTOC__"].join("\n"),
-                    );
-                    text = [];
-                }
-                text.push(item.text);
-                break;
-            case "body":
-                // toc.txt
-                if (items[i - 1]?.part === "toc") {
-                    saveFile(
-                        "toc.txt",
-                        [notice, "", ...text, "", "__NOTOC__"].join("\n"),
-                    );
-                    text = [];
-                }
-                // body
-                if (prevItem?.part !== "body") {
-                    // bodyの最初の行 (0. はじめに)
-                    let itemText = bodyItemToText(item);
-                    text.push(itemText);
-                    let tocText = bodyItemToTocText(item);
-                    if (tocText !== undefined) {
-                        toc.push(tocText);
-                    }
-                } else {
-                    const prevSection = crNumberToSectionNumber(
-                        prevItem.crNumber,
-                    );
-                    const currentSection = crNumberToSectionNumber(
-                        item.crNumber,
-                    );
-                    if (
-                        prevSection !== undefined &&
-                        currentSection !== undefined &&
-                        prevSection !== currentSection
-                    ) {
-                        // 新しいセクション (bodyはセクションごとにファイルを切り分ける)
-                        // FIXME: セクションを辞書にして一括で出力する
-                        // ${major[0]}.txt
-                        saveFile(
-                            `${prevSection}.txt`,
-                            [
-                                notice,
-                                "",
-                                ...toc,
-                                "",
-                                "----",
-                                "",
-                                ...text,
-                                "",
-                                "__NOTOC__",
-                            ].join("\n"),
-                        );
-                        text = [];
-                        toc = [];
-                    }
-                    let itemText = bodyItemToText(item);
-                    if (itemText !== undefined) {
-                        text.push(itemText);
-                    }
-                    let tocText = bodyItemToTocText(item);
-                    if (tocText !== undefined) {
-                        toc.push(tocText);
-                    }
-                }
-                break;
-            case "dict":
-                // toc.txt
-                if (prevItem !== undefined && prevItem.part === "body") {
-                    const prevSection = prevItem.crNumber.major?.at(0);
-                    if (prevSection === undefined) {
-                        throw new Error();
-                    }
-                    saveFile(
-                        `${prevSection}.txt`,
-                        [notice, "", ...toc, "", ...text, "", "__NOTOC__"].join(
-                            "\n",
-                        ),
-                    );
-                    text = [];
-                }
-                text.push("=" + item.itemName + "=");
-                text.push(item.body + "\n");
-                break;
-            default:
-                break;
+            }
         }
-    });
-    saveFile("dict.txt", [notice, "", ...text, "", "__NOTOC__"].join("\n"));
+        // 本文
+        const bodyText: string[] = [];
+        for (const item of bodyItems) {
+            bodyText.push(bodyItemToText(item));
+        }
+
+        const sectionText = [
+            notice,
+            "",
+            ...toc,
+            "",
+            "----",
+            "",
+            ...bodyText,
+            "",
+            "__NOTOC__",
+        ];
+        saveFile(`section${section}.txt`, sectionText.join("\n"));
+    }
+
+    // dict
+    const dictItems = items.filter((i) => i.part === "dict");
+    const dictText = [notice, ""];
+    for (const item of dictItems) {
+        dictText.push(`=${item.itemName}=`);
+        dictText.push(item.body);
+        dictText.push("");
+    }
+    dictText.push(...["", "__NOTOC__"]);
+    saveFile("dict.txt", dictText.join("\n"));
 
     console.log("ok");
 }
 
 // MARK: parseAsHeader
-/** まえがき */
+/** 前書き行のパース */
 function parseAsHeader(line: string): HeaderItem {
     return { part: "header", text: line };
 }
 
 // MARK: parseAsToc
-/** 目次 */
+/** 目次行のパース */
 function parseAsToc(line: string): TocItem | undefined {
     if (line === "もくじ") {
         return undefined;
@@ -287,13 +295,14 @@ function parseAsToc(line: string): TocItem | undefined {
 }
 
 // MARK: parseAsBody
-/** 項番行をパース */
+/** 項番行のパース。行の先頭に項番がある場合は BodyItem にパースして返す。ない場合は元のテキストを返す。 */
 function parseAsBody(line: string): BodyItem | string | undefined {
     if (line === "マジック：ザ・ギャザリング　総合ルール") {
         return undefined;
     }
     // 項番付きの行
     if (isNumberedLine(line)) {
+        // FIXME: isNumberedLine で undefined を返す
         return {
             part: "body",
             text: line,
@@ -302,13 +311,13 @@ function parseAsBody(line: string): BodyItem | string | undefined {
         } as const;
     } else {
         // 項番のない行
-        const body = line.replace(/^\s+/, "");
-        return body;
+        const text = line.replace(/^\s+/, "");
+        return text;
     }
 }
 
 // MARK: parseAsDict
-/** 辞書行をパース */
+/** 辞書行のパース */
 function parseAsDict(line: string): DictItem | string | undefined {
     if (line === "用語集") {
         return undefined;
@@ -323,8 +332,8 @@ function parseAsDict(line: string): DictItem | string | undefined {
         };
     } else {
         // 説明文の場合は前の行に追加
-        const body = line.replace(/^\s+/, "");
-        return body;
+        const text = line.replace(/^\s+/, "");
+        return text;
     }
 }
 

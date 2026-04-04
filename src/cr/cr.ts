@@ -1,3 +1,5 @@
+import { mainModule } from "process";
+
 /** 項番行の頭から項番をキャプチャする */
 export function parseCRNumber(text: string): CRNumber {
     const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
@@ -35,19 +37,26 @@ export type CRNumber = {
     patch: string | undefined;
 };
 
-/** CR番号の階層レベル */
-export function getLevel(crNumber: CRNumber): number {
-    let level = 0;
-    if (crNumber.major !== undefined) {
-        level++;
-        if (crNumber.minor !== undefined) {
-            level++;
-            if (crNumber.patch !== undefined) {
-                level++;
-            }
-        }
+/** CR番号の階層レベル。\
+ * (`undefined`, `undefined`, `undefined`) => `undefined` \
+ * (`"1"`, `undefined`, `undefined`) => `1` \
+ * (`"101"`, `undefined`, `undefined`) => `2` \
+ * (`"101"`, `"2"`, `undefined`) => `3` \
+ * (`"101"`, `"2"`, `"a"`) => `4`
+ */
+export function getLevel(crNumber: CRNumber): number | undefined {
+    const major = crNumber.major;
+    const minor = crNumber.minor;
+    const patch = crNumber.patch;
+    if (major === undefined) {
+        return undefined;
+    } else if (minor === undefined) {
+        return major.length === 1 ? 1 : 2;
+    } else if (patch === undefined) {
+        return 3;
+    } else {
+        return 4;
     }
-    return level;
 }
 
 /** CR番号から文字列に変換する */
@@ -97,13 +106,14 @@ export function bodyItemToText(item: BodyItem): string {
         item.crNumber.major !== undefined &&
         parseInt(item.crNumber.major) < 100
     ) {
-        // 一番大きいレベル (0, 1, 2, ..., 9) はコメントで出力
+        // 一番大きいレベル (0, 1, 2, ..., 9)
         // return `<!-- ${item.text} -->`;
         return item.text;
     } else {
         let ret = "";
-        const headingMark = "=".repeat(getLevel(item.crNumber));
-        if (getLevel(item.crNumber) === 1) {
+        const level = getLevel(item.crNumber);
+        const headingMark = level !== undefined ? "=".repeat(level - 1) : "";
+        if (level === 2) {
             ret += "\n";
         }
         ret += headingMark;
@@ -135,9 +145,9 @@ export function bodyItemToTocText(item: BodyItem): string | undefined {
     const level = getLevel(item.crNumber);
 
     switch (level) {
-        case 0:
-            return "*" + `[[#${crNumberToString(item.crNumber)}|${item.text}]]`;
         case 1:
+            return "*" + `[[#${crNumberToString(item.crNumber)}|${item.text}]]`;
+        case 2:
             return (
                 (item.crNumber.major !== undefined &&
                 item.crNumber.major.length < 3
@@ -145,7 +155,7 @@ export function bodyItemToTocText(item: BodyItem): string | undefined {
                     : "**") +
                 `[[#${crNumberToString(item.crNumber)}|${item.text}]]`
             );
-        case 2:
+        case 3:
             if (
                 item.crNumber.major === "701" ||
                 item.crNumber.major === "702"
@@ -157,6 +167,12 @@ export function bodyItemToTocText(item: BodyItem): string | undefined {
                         : `[[#${crNumberToString(item.crNumber)}|${crNumberToString(item.crNumber)}]]`)
                 );
             }
+            break;
+        case 4:
+            break;
+        case undefined:
+            break;
+        default:
             break;
     }
     return undefined;
