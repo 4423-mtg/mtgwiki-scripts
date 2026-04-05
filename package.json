@@ -12,7 +12,9 @@
     "gen_cr": "tsc && node ./dist/cr/test_cr.js"
   },
   "dependencies": {
-    "cheerio": "^1.1.2",
+    "cheerio": "^1.1.2"
+  },
+  "devDependencies": {
     "@scryfall/api-types": "^1.0.0-alpha.4",
     "@types/node": "^24.3.0",
     "typescript": "~5.8.3"

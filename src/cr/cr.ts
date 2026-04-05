@@ -1,25 +1,34 @@
 /** 項番行の頭から項番をキャプチャする */
-export function getCRNumber(text: string): CRNumber {
-    const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
-    const m = text.match(ptn);
-    if (m === null) {
+export function parseNumberedLine(line: string): {
+    crNumber: CRNumber;
+    text: string;
+} {
+    const ptn =
+        /^(?<major>[0-9]+)(\.((?<minor>[0-9]+)(\.|(?<patch>[a-z]))?)?)?\s*(?<text>.*)/;
+    const match = line.match(ptn);
+
+    if (match === null) {
         return {
-            major: undefined,
-            minor: undefined,
-            patch: undefined,
+            crNumber: { major: undefined, minor: undefined, patch: undefined },
+            text: line,
         };
     } else {
+        const major = match.groups?.["major"];
+        const minor = match.groups?.["minor"];
+        const patch = match.groups?.["patch"];
+        const text = match.groups?.["text"];
+        if (text === undefined) {
+            throw new Error();
+        }
         return {
-            major: m[1],
-            minor: m[4],
-            patch: m[6],
+            crNumber: {
+                major: major,
+                minor: minor,
+                patch: patch,
+            },
+            text: text,
         };
     }
-}
-/** 項番を除いたテキスト */ // FIXME: 上と統合する
-export function parseTextBody(text: string): string {
-    const ptn = /^([0-9]+)(\.(([0-9]+)(\.|([a-z]))?)?)?/;
-    return text.replace(ptn, "").replace(/^ */, "");
 }
 
 // =======================================================

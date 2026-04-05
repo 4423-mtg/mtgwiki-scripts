@@ -6,8 +6,7 @@ import {
     bodyItemToText,
     DictItem,
     HeaderItem,
-    getCRNumber,
-    parseTextBody,
+    parseNumberedLine,
     bodyItemToTocText,
     TocItem,
 } from "./cr.js";
@@ -299,11 +298,11 @@ function parseAsBody(line: string): BodyItem | string | undefined {
         return undefined;
     }
     // 項番付きの行
-    const crNumber = getCRNumber(line);
+    const parsed = parseNumberedLine(line);
     if (
-        crNumber.major === undefined &&
-        crNumber.minor === undefined &&
-        crNumber.patch === undefined
+        parsed.crNumber.major === undefined &&
+        parsed.crNumber.minor === undefined &&
+        parsed.crNumber.patch === undefined
     ) {
         // 項番のない行
         const text = line.trim();
@@ -312,8 +311,8 @@ function parseAsBody(line: string): BodyItem | string | undefined {
         return {
             part: "body",
             text: line,
-            crNumber: crNumber,
-            noNumberText: parseTextBody(line),
+            crNumber: parsed.crNumber,
+            noNumberText: parsed.text,
         } as const;
     }
 }
